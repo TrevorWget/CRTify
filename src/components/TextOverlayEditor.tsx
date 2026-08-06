@@ -8,9 +8,52 @@ interface TextOverlayEditorProps {
   onAddLayer: () => void;
   onDeleteLayer: (id: string) => void;
   onMoveLayer: (id: string, direction: 'up' | 'down') => void;
+  onResetLayer: (id: string) => void;
 }
 
-const FONTS: FontFamily[] = ['VT323', 'Press Start 2P', 'monospace'];
+const FONTS: FontFamily[] = [
+  'VT323',
+  'Press Start 2P',
+  'Bungee',
+  'Audiowide',
+  'Orbitron',
+  'Black Ops One',
+  'Share Tech Mono',
+  'monospace',
+];
+
+function LayerSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="control-row">
+      <span className="control-label">
+        {label}
+        <span className="control-value">{Number.isInteger(step) ? value : value.toFixed(2)}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
+  );
+}
 
 export function TextOverlayEditor({
   layers,
@@ -20,6 +63,7 @@ export function TextOverlayEditor({
   onAddLayer,
   onDeleteLayer,
   onMoveLayer,
+  onResetLayer,
 }: TextOverlayEditorProps) {
   const selected = layers.find((l) => l.id === selectedLayerId);
 
@@ -94,6 +138,16 @@ export function TextOverlayEditor({
 
       {selected && (
         <div className="layer-editor">
+          <div className="section-heading">
+            <span className="editor-kicker">TYPE CONTROLS</span>
+            <button
+              type="button"
+              className="btn btn-small"
+              onClick={() => onResetLayer(selected.id)}
+            >
+              Defaults
+            </button>
+          </div>
           <label className="control-row">
             <span className="control-label">Text</span>
             <input
@@ -117,6 +171,51 @@ export function TextOverlayEditor({
               ))}
             </select>
           </label>
+          <div className="control-row">
+            <span className="control-label">Alignment</span>
+            <div className="segmented-control">
+              {(['left', 'center', 'right'] as const).map((alignment) => (
+                <button
+                  key={alignment}
+                  type="button"
+                  className={selected.textAlign === alignment ? 'active' : ''}
+                  onClick={() => onUpdateLayer(selected.id, { textAlign: alignment })}
+                  title={`Align ${alignment}`}
+                >
+                  {alignment === 'left' ? '≡' : alignment === 'center' ? '≡' : '≡'}
+                  <span>{alignment[0].toUpperCase()}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="control-row">
+            <span className="control-label">Position</span>
+            <div className="position-buttons">
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => onUpdateLayer(selected.id, { x: 0.5, textAlign: 'center' })}
+              >
+                Center X
+              </button>
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => onUpdateLayer(selected.id, { y: 0.5 })}
+              >
+                Center Y
+              </button>
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() =>
+                  onUpdateLayer(selected.id, { x: 0.5, y: 0.5, textAlign: 'center' })
+                }
+              >
+                Center both
+              </button>
+            </div>
+          </div>
           <label className="control-row">
             <span className="control-label">Size</span>
             <input
@@ -137,38 +236,25 @@ export function TextOverlayEditor({
               onChange={(e) => onUpdateLayer(selected.id, { color: e.target.value })}
             />
           </label>
-          <label className="control-row">
-            <span className="control-label">
-              Glow
-              <span className="control-value">{selected.glow}</span>
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={30}
-              step={1}
-              value={selected.glow}
-              onChange={(e) =>
-                onUpdateLayer(selected.id, { glow: parseInt(e.target.value, 10) })
-              }
-            />
-          </label>
-          <label className="control-row">
-            <span className="control-label">
-              Opacity
-              <span className="control-value">{selected.opacity.toFixed(2)}</span>
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={selected.opacity}
-              onChange={(e) =>
-                onUpdateLayer(selected.id, { opacity: parseFloat(e.target.value) })
-              }
-            />
-          </label>
+          <div className="control-divider">DISTORTION</div>
+          <LayerSlider label="Warp" value={selected.warp} min={0} max={1} step={0.01} onChange={(warp) => onUpdateLayer(selected.id, { warp })} />
+          <LayerSlider label="Rotation" value={selected.rotation} min={-180} max={180} step={1} onChange={(rotation) => onUpdateLayer(selected.id, { rotation })} />
+          <LayerSlider label="Horizontal scale" value={selected.scaleX} min={0.25} max={2.5} step={0.01} onChange={(scaleX) => onUpdateLayer(selected.id, { scaleX })} />
+          <LayerSlider label="Vertical scale" value={selected.scaleY} min={0.25} max={2.5} step={0.01} onChange={(scaleY) => onUpdateLayer(selected.id, { scaleY })} />
+          <LayerSlider label="Skew" value={selected.skew} min={-45} max={45} step={1} onChange={(skew) => onUpdateLayer(selected.id, { skew })} />
+          <LayerSlider label="Letter spacing" value={selected.letterSpacing} min={-4} max={30} step={1} onChange={(letterSpacing) => onUpdateLayer(selected.id, { letterSpacing })} />
+
+          <div className="control-divider">SIGNAL / GLOW</div>
+          <LayerSlider label="Glow" value={selected.glow} min={0} max={50} step={1} onChange={(glow) => onUpdateLayer(selected.id, { glow })} />
+          <LayerSlider label="Soft blur" value={selected.blur} min={0} max={8} step={0.1} onChange={(blur) => onUpdateLayer(selected.id, { blur })} />
+          <LayerSlider label="Stroke" value={selected.strokeWidth} min={0} max={12} step={0.5} onChange={(strokeWidth) => onUpdateLayer(selected.id, { strokeWidth })} />
+          {selected.strokeWidth > 0 && (
+            <label className="control-row">
+              <span className="control-label">Stroke color</span>
+              <input type="color" value={selected.strokeColor} onChange={(event) => onUpdateLayer(selected.id, { strokeColor: event.target.value })} />
+            </label>
+          )}
+          <LayerSlider label="Opacity" value={selected.opacity} min={0} max={1} step={0.01} onChange={(opacity) => onUpdateLayer(selected.id, { opacity })} />
         </div>
       )}
     </div>

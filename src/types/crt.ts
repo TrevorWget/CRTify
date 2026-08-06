@@ -24,7 +24,7 @@ export const defaultCrtSettings: CrtSettings = {
   vignette: 0.5,
   noise: 0.05,
   bloom: 0.2,
-  tint: '#33ff66',
+  tint: '#ff9a1f',
   tintStrength: 0.15,
   brightness: 1.0,
   contrast: 1.1,
@@ -32,7 +32,17 @@ export const defaultCrtSettings: CrtSettings = {
   flickerIntensity: 0.05,
 };
 
-export type FontFamily = 'VT323' | 'Press Start 2P' | 'monospace';
+export type FontFamily =
+  | 'VT323'
+  | 'Press Start 2P'
+  | 'Bungee'
+  | 'Audiowide'
+  | 'Orbitron'
+  | 'Black Ops One'
+  | 'Share Tech Mono'
+  | 'monospace';
+
+export type TextAlignment = 'left' | 'center' | 'right';
 
 export interface TextLayer {
   id: string;
@@ -42,7 +52,17 @@ export interface TextLayer {
   fontSize: number;
   color: string;
   fontFamily: FontFamily;
+  textAlign: TextAlignment;
   glow: number;
+  blur: number;
+  strokeWidth: number;
+  strokeColor: string;
+  letterSpacing: number;
+  warp: number;
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
+  skew: number;
   opacity: number;
   locked: boolean;
 }
