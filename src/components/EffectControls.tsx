@@ -1,4 +1,4 @@
-import type { CrtSettings } from '../types/crt';
+import { defaultCrtSettings, type CrtSettings } from '../types/crt';
 
 interface EffectControlsProps {
   settings: CrtSettings;
@@ -15,6 +15,7 @@ function Slider({
   max,
   step,
   onChange,
+  onReset,
 }: {
   label: string;
   value: number;
@@ -22,11 +23,14 @@ function Slider({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  onReset: () => void;
 }) {
   return (
-    <label className="control-row">
+    <div className="control-row">
       <span className="control-label">
-        {label}
+        <button type="button" className="effect-reset-label" onClick={onReset} title="Reset to default">
+          {label}
+        </button>
         <span className="control-value">{value.toFixed(2)}</span>
       </span>
       <input
@@ -37,7 +41,7 @@ function Slider({
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
       />
-    </label>
+    </div>
   );
 }
 
@@ -66,6 +70,7 @@ export function EffectControls({
         max={1}
         step={0.01}
         onChange={(v) => update({ curvature: v })}
+        onReset={() => update({ curvature: defaultCrtSettings.curvature })}
       />
       <Slider
         label="Scanline Intensity"
@@ -74,6 +79,7 @@ export function EffectControls({
         max={1}
         step={0.01}
         onChange={(v) => update({ scanlineIntensity: v })}
+        onReset={() => update({ scanlineIntensity: defaultCrtSettings.scanlineIntensity })}
       />
       <Slider
         label="Scanline Count"
@@ -82,6 +88,7 @@ export function EffectControls({
         max={800}
         step={10}
         onChange={(v) => update({ scanlineCount: v })}
+        onReset={() => update({ scanlineCount: defaultCrtSettings.scanlineCount })}
       />
       <Slider
         label="Chromatic Aberration"
@@ -90,6 +97,7 @@ export function EffectControls({
         max={0.02}
         step={0.0005}
         onChange={(v) => update({ aberration: v })}
+        onReset={() => update({ aberration: defaultCrtSettings.aberration })}
       />
       <Slider
         label="Vignette"
@@ -98,6 +106,7 @@ export function EffectControls({
         max={1}
         step={0.01}
         onChange={(v) => update({ vignette: v })}
+        onReset={() => update({ vignette: defaultCrtSettings.vignette })}
       />
       <Slider
         label="Noise"
@@ -106,6 +115,7 @@ export function EffectControls({
         max={0.3}
         step={0.01}
         onChange={(v) => update({ noise: v })}
+        onReset={() => update({ noise: defaultCrtSettings.noise })}
       />
       <Slider
         label="Bloom"
@@ -114,6 +124,7 @@ export function EffectControls({
         max={1}
         step={0.01}
         onChange={(v) => update({ bloom: v })}
+        onReset={() => update({ bloom: defaultCrtSettings.bloom })}
       />
       <Slider
         label="Tint Strength"
@@ -122,15 +133,25 @@ export function EffectControls({
         max={1}
         step={0.01}
         onChange={(v) => update({ tintStrength: v })}
+        onReset={() => update({ tintStrength: defaultCrtSettings.tintStrength })}
       />
-      <label className="control-row">
-        <span className="control-label">Phosphor Tint</span>
+      <div className="control-row">
+        <span className="control-label">
+          <button
+            type="button"
+            className="effect-reset-label"
+            onClick={() => update({ tint: defaultCrtSettings.tint })}
+            title="Reset to default"
+          >
+            Phosphor Tint
+          </button>
+        </span>
         <input
           type="color"
           value={settings.tint}
           onChange={(e) => update({ tint: e.target.value })}
         />
-      </label>
+      </div>
       <Slider
         label="Brightness"
         value={settings.brightness}
@@ -138,6 +159,7 @@ export function EffectControls({
         max={2}
         step={0.01}
         onChange={(v) => update({ brightness: v })}
+        onReset={() => update({ brightness: defaultCrtSettings.brightness })}
       />
       <Slider
         label="Contrast"
@@ -146,15 +168,25 @@ export function EffectControls({
         max={2}
         step={0.01}
         onChange={(v) => update({ contrast: v })}
+        onReset={() => update({ contrast: defaultCrtSettings.contrast })}
       />
-      <label className="control-row toggle-row">
-        <span className="control-label">Flicker</span>
+      <div className="control-row toggle-row">
+        <span className="control-label">
+          <button
+            type="button"
+            className="effect-reset-label"
+            onClick={() => update({ flicker: defaultCrtSettings.flicker })}
+            title="Reset to default"
+          >
+            Flicker
+          </button>
+        </span>
         <input
           type="checkbox"
           checked={settings.flicker}
           onChange={(e) => update({ flicker: e.target.checked })}
         />
-      </label>
+      </div>
       {settings.flicker && (
         <Slider
           label="Flicker Intensity"
@@ -163,16 +195,26 @@ export function EffectControls({
           max={0.2}
           step={0.005}
           onChange={(v) => update({ flickerIntensity: v })}
+          onReset={() => update({ flickerIntensity: defaultCrtSettings.flickerIntensity })}
         />
       )}
-      <label className="control-row toggle-row">
-        <span className="control-label">CRT-affect text</span>
+      <div className="control-row toggle-row">
+        <span className="control-label">
+          <button
+            type="button"
+            className="effect-reset-label"
+            onClick={() => onCrtAffectTextChange(false)}
+            title="Reset to default"
+          >
+            CRT-affect text
+          </button>
+        </span>
         <input
           type="checkbox"
           checked={crtAffectText}
           onChange={(e) => onCrtAffectTextChange(e.target.checked)}
         />
-      </label>
+      </div>
     </div>
   );
 }

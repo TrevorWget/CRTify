@@ -2,6 +2,10 @@ import vertSource from '../shaders/crt.vert?raw';
 import fragSource from '../shaders/crt.frag?raw';
 import type { CrtSettings } from '../types/crt';
 
+interface RenderOptions {
+  preserveAlpha?: boolean;
+}
+
 function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type);
   if (!shader) throw new Error('Failed to create shader');
@@ -102,6 +106,7 @@ export class CrtRenderer {
     source: TexImageSource & { videoWidth?: number; videoHeight?: number },
     settings: CrtSettings,
     time = 0,
+    options: RenderOptions = {},
   ): HTMLCanvasElement {
     const { gl, program, texture } = this;
     const srcWidth =
@@ -117,6 +122,10 @@ export class CrtRenderer {
           ? (source as VideoFrame).displayHeight
           : (source as HTMLImageElement | HTMLCanvasElement).height;
     this.resize(srcWidth, srcHeight);
+    const preserveAlpha = options.preserveAlpha ?? false;
+
+    gl.clearColor(0, 0, 0, preserveAlpha ? 0 : 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -152,6 +161,7 @@ export class CrtRenderer {
       ['u_contrast', settings.contrast],
       ['u_flicker', settings.flicker ? 1.0 : 0.0],
       ['u_flickerIntensity', settings.flickerIntensity],
+      ['u_preserveAlpha', preserveAlpha ? 1.0 : 0.0],
     ];
 
     gl.uniform1i(gl.getUniformLocation(program, 'u_image'), 0);

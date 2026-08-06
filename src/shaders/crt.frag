@@ -16,6 +16,7 @@ uniform float u_brightness;
 uniform float u_contrast;
 uniform float u_flicker;
 uniform float u_flickerIntensity;
+uniform float u_preserveAlpha;
 
 varying vec2 v_texCoord;
 
@@ -42,13 +43,16 @@ void main() {
   vec2 uv = curveUV(v_texCoord, u_curvature * 0.5);
 
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - u_preserveAlpha);
     return;
   }
 
   vec3 color = sampleImage(uv);
+  float alpha = texture2D(u_image, uv).a;
 
-  float scanline = sin(uv.y * u_scanlineCount * 3.14159) * 0.5 + 0.5;
+  // Scanlines belong to the display surface, so their phase must not move
+  // when the source image or a text layer uses a different curvature.
+  float scanline = sin(v_texCoord.y * u_scanlineCount * 3.14159) * 0.5 + 0.5;
   color *= 1.0 - u_scanlineIntensity * (1.0 - scanline);
 
   float bloomFactor = max(0.0, dot(color, vec3(0.299, 0.587, 0.114)) - 0.6);
@@ -71,5 +75,5 @@ void main() {
   float vig = 1.0 - dot(vigUv, vigUv) * u_vignette * 2.5;
   color *= clamp(vig, 0.0, 1.0);
 
-  gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+  gl_FragColor = vec4(clamp(color, 0.0, 1.0), mix(1.0, alpha, u_preserveAlpha));
 }

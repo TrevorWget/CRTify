@@ -1,4 +1,7 @@
 import type { CrtSettings, TextLayer } from '../types/crt';
+import { CrtRenderer } from './webgl';
+
+let textEffectRenderer: CrtRenderer | null = null;
 
 function getFontStack(fontFamily: TextLayer['fontFamily']): string {
   return fontFamily === 'monospace' ? 'monospace' : `"${fontFamily}", monospace`;
@@ -16,40 +19,37 @@ function drawLayerText(ctx: CanvasRenderingContext2D, layer: TextLayer) {
   for (let index = 0; index < layer.text.length; index++) {
     const character = layer.text[index];
     const characterWidth = ctx.measureText(character).width;
-    const phase = layer.text.length > 1 ? index / (layer.text.length - 1) : 0;
-    const warpOffset = Math.sin(phase * Math.PI * 2) * layer.warp * layer.fontSize * 0.5;
 
     if (layer.strokeWidth > 0) {
-      ctx.strokeText(character, cursor, warpOffset);
+      ctx.strokeText(character, cursor, 0);
     }
-    ctx.fillText(character, cursor, warpOffset);
+    ctx.fillText(character, cursor, 0);
     cursor += characterWidth + layer.letterSpacing;
   }
 }
 
-function applyCrtToText(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
+function getTextEffectSettings(
   settings: CrtSettings,
-) {
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
-  const scanlineCount = settings.scanlineCount;
-
-  for (let y = 0; y < height; y++) {
-    const scanline = Math.sin((y / height) * scanlineCount * Math.PI) * 0.5 + 0.5;
-    const factor = 1.0 - settings.scanlineIntensity * 0.5 * (1.0 - scanline);
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      if (data[i + 3] > 0) {
-        data[i] = Math.min(255, data[i] * factor);
-        data[i + 1] = Math.min(255, data[i + 1] * factor);
-        data[i + 2] = Math.min(255, data[i + 2] * factor);
-      }
-    }
+  curvature: number,
+  applyCrtEffects: boolean,
+): CrtSettings {
+  if (applyCrtEffects) {
+    return { ...settings, curvature };
   }
-  ctx.putImageData(imageData, 0, 0);
+
+  return {
+    ...settings,
+    curvature,
+    scanlineIntensity: 0,
+    aberration: 0,
+    vignette: 0,
+    noise: 0,
+    bloom: 0,
+    tintStrength: 0,
+    brightness: 1,
+    contrast: 1,
+    flicker: false,
+  };
 }
 
 export function drawTextLayers(
@@ -65,66 +65,76 @@ export function drawTextLayers(
   const width = canvas.width;
   const height = canvas.height;
 
-  const textCanvas = document.createElement('canvas');
-  textCanvas.width = width;
-  textCanvas.height = height;
-  const textCtx = textCanvas.getContext('2d');
-  if (!textCtx) return;
+  const layerCanvas = document.createElement('canvas');
+  layerCanvas.width = width;
+  layerCanvas.height = height;
+  const layerCtx = layerCanvas.getContext('2d');
+  if (!layerCtx) return;
 
   for (const layer of layers) {
     if (!layer.text.trim()) continue;
 
+    layerCtx.clearRect(0, 0, width, height);
     const x = layer.x * width;
     const y = layer.y * height;
     const font = `${layer.fontSize}px ${getFontStack(layer.fontFamily)}`;
 
-    textCtx.save();
-    textCtx.translate(x, y);
-    textCtx.rotate((layer.rotation * Math.PI) / 180);
-    textCtx.transform(1, 0, Math.tan((layer.skew * Math.PI) / 180), 1, 0, 0);
-    textCtx.scale(layer.scaleX, layer.scaleY);
-    textCtx.globalAlpha = layer.opacity;
-    textCtx.font = font;
-    textCtx.textBaseline = 'middle';
-    textCtx.textAlign = 'left';
-    textCtx.filter = layer.blur > 0 ? `blur(${layer.blur}px)` : 'none';
+    layerCtx.save();
+    layerCtx.translate(x, y);
+    layerCtx.rotate((layer.rotation * Math.PI) / 180);
+    layerCtx.transform(1, 0, Math.tan((layer.skew * Math.PI) / 180), 1, 0, 0);
+    layerCtx.scale(layer.scaleX, layer.scaleY);
+    layerCtx.globalAlpha = layer.opacity;
+    layerCtx.font = font;
+    layerCtx.textBaseline = 'middle';
+    layerCtx.textAlign = 'left';
+    layerCtx.filter = layer.blur > 0 ? `blur(${layer.blur}px)` : 'none';
 
     if (layer.glow > 0) {
-      textCtx.shadowColor = layer.color;
-      textCtx.shadowBlur = layer.glow;
+      layerCtx.shadowColor = layer.color;
+      layerCtx.shadowBlur = layer.glow;
     }
 
-    textCtx.fillStyle = layer.color;
-    textCtx.strokeStyle = layer.strokeColor;
-    textCtx.lineWidth = layer.strokeWidth;
-    textCtx.lineJoin = 'round';
-    drawLayerText(textCtx, layer);
+    layerCtx.fillStyle = layer.color;
+    layerCtx.strokeStyle = layer.strokeColor;
+    layerCtx.lineWidth = layer.strokeWidth;
+    layerCtx.lineJoin = 'round';
+    drawLayerText(layerCtx, layer);
+    layerCtx.restore();
+
+    if (crtAffectText || layer.warp > 0) {
+      textEffectRenderer ??= new CrtRenderer();
+      const effectSettings = getTextEffectSettings(settings, layer.warp, crtAffectText);
+      const renderedLayer = textEffectRenderer.renderFrame(layerCanvas, effectSettings, 0, {
+        preserveAlpha: true,
+      });
+      ctx.drawImage(renderedLayer, 0, 0);
+    } else {
+      ctx.drawImage(layerCanvas, 0, 0);
+    }
 
     if (selectedLayerId === layer.id) {
-      const textWidth = getTextWidth(textCtx, layer);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate((layer.rotation * Math.PI) / 180);
+      ctx.transform(1, 0, Math.tan((layer.skew * Math.PI) / 180), 1, 0, 0);
+      ctx.scale(layer.scaleX, layer.scaleY);
+      ctx.font = font;
+      const textWidth = getTextWidth(ctx, layer);
       const startX =
         layer.textAlign === 'center' ? -textWidth / 2 : layer.textAlign === 'right' ? -textWidth : 0;
-      textCtx.shadowBlur = 0;
-      textCtx.filter = 'none';
-      textCtx.strokeStyle = '#ffb000';
-      textCtx.lineWidth = 2 / Math.max(layer.scaleX, layer.scaleY);
-      textCtx.setLineDash([4, 4]);
-      textCtx.strokeRect(
+      ctx.strokeStyle = '#ffb000';
+      ctx.lineWidth = 2 / Math.max(layer.scaleX, layer.scaleY);
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(
         startX - 6,
-        -layer.fontSize / 2 - layer.warp * layer.fontSize * 0.5 - 6,
+        -layer.fontSize / 2 - 6,
         textWidth + 12,
-        layer.fontSize * (1 + layer.warp) + 12,
+        layer.fontSize + 12,
       );
+      ctx.restore();
     }
-
-    textCtx.restore();
   }
-
-  if (crtAffectText) {
-    applyCrtToText(textCtx, width, height, settings);
-  }
-
-  ctx.drawImage(textCanvas, 0, 0);
 }
 
 export function hitTestTextLayer(
