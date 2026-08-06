@@ -54,7 +54,7 @@ export function useCrtRenderer({
 
     if (!source) return;
 
-    const crtCanvas = renderer.renderFrame(source, settings, time);
+    const crtCanvas = renderer.renderFrame(source, settings, time, { preserveAlpha: true });
     const displayCanvas = canvasRef.current;
     displayCanvas.width = crtCanvas.width;
     displayCanvas.height = crtCanvas.height;

@@ -26,6 +26,7 @@ function createTextLayer(): TextLayer {
     textAlign: 'left',
     glow: 10,
     blur: 0,
+    brightness: 1,
     strokeWidth: 0,
     strokeColor: '#e63415',
     letterSpacing: 0,
@@ -273,7 +274,10 @@ export default function App() {
       )}
 
       <footer className="app-footer">
-        <p>Max resolution 1920px · GIFs limited to 300 frames · Video export may take a while</p>
+        <p>
+          Max resolution 1920px · GIFs up to 1200 frames within memory limits · Video export may
+          take a while
+        </p>
       </footer>
     </div>
   );

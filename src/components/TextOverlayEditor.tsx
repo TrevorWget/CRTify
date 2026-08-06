@@ -31,6 +31,7 @@ const TEXT_EFFECT_DEFAULTS = {
   letterSpacing: 0,
   glow: 10,
   blur: 0,
+  brightness: 1,
   strokeWidth: 0,
   opacity: 1,
 } as const;
@@ -269,6 +270,7 @@ export function TextOverlayEditor({
           <div className="control-divider">SIGNAL / GLOW</div>
           <LayerSlider label="Glow" value={selected.glow} min={0} max={50} step={1} defaultValue={TEXT_EFFECT_DEFAULTS.glow} onChange={(glow) => onUpdateLayer(selected.id, { glow })} />
           <LayerSlider label="Soft blur" value={selected.blur} min={0} max={8} step={0.1} defaultValue={TEXT_EFFECT_DEFAULTS.blur} onChange={(blur) => onUpdateLayer(selected.id, { blur })} />
+          <LayerSlider label="Brightness" value={selected.brightness} min={0.25} max={3} step={0.01} defaultValue={TEXT_EFFECT_DEFAULTS.brightness} onChange={(brightness) => onUpdateLayer(selected.id, { brightness })} />
           <LayerSlider label="Stroke" value={selected.strokeWidth} min={0} max={12} step={0.5} defaultValue={TEXT_EFFECT_DEFAULTS.strokeWidth} onChange={(strokeWidth) => onUpdateLayer(selected.id, { strokeWidth })} />
           {selected.strokeWidth > 0 && (
             <label className="control-row">

@@ -46,7 +46,9 @@ export function useExporter() {
 
           if (!source) throw new Error('No media to export');
 
-          const crtCanvas = renderer.renderFrame(source, settings, 0);
+          const crtCanvas = renderer.renderFrame(source, settings, 0, {
+            preserveAlpha: format === 'png',
+          });
           drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null);
           const blob = await exportCanvasImage(crtCanvas, format);
           downloadBlob(blob, `${baseName}.${getExportExtension(format)}`);
