@@ -22,6 +22,19 @@ const FONTS: FontFamily[] = [
   'monospace',
 ];
 
+const TEXT_EFFECT_DEFAULTS = {
+  warp: 0,
+  rotation: 0,
+  scaleX: 1,
+  scaleY: 1,
+  skew: 0,
+  letterSpacing: 0,
+  glow: 10,
+  blur: 0,
+  strokeWidth: 0,
+  opacity: 1,
+} as const;
+
 function LayerSlider({
   label,
   value,
@@ -29,6 +42,7 @@ function LayerSlider({
   max,
   step,
   onChange,
+  defaultValue,
 }: {
   label: string;
   value: number;
@@ -36,11 +50,19 @@ function LayerSlider({
   max: number;
   step: number;
   onChange: (value: number) => void;
+  defaultValue: number;
 }) {
   return (
-    <label className="control-row">
+    <div className="control-row">
       <span className="control-label">
-        {label}
+        <button
+          type="button"
+          className="effect-reset-label"
+          onClick={() => onChange(defaultValue)}
+          title="Reset to default"
+        >
+          {label}
+        </button>
         <span className="control-value">{Number.isInteger(step) ? value : value.toFixed(2)}</span>
       </span>
       <input
@@ -51,7 +73,7 @@ function LayerSlider({
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
       />
-    </label>
+    </div>
   );
 }
 
@@ -237,24 +259,24 @@ export function TextOverlayEditor({
             />
           </label>
           <div className="control-divider">DISTORTION</div>
-          <LayerSlider label="Warp" value={selected.warp} min={0} max={1} step={0.01} onChange={(warp) => onUpdateLayer(selected.id, { warp })} />
-          <LayerSlider label="Rotation" value={selected.rotation} min={-180} max={180} step={1} onChange={(rotation) => onUpdateLayer(selected.id, { rotation })} />
-          <LayerSlider label="Horizontal scale" value={selected.scaleX} min={0.25} max={2.5} step={0.01} onChange={(scaleX) => onUpdateLayer(selected.id, { scaleX })} />
-          <LayerSlider label="Vertical scale" value={selected.scaleY} min={0.25} max={2.5} step={0.01} onChange={(scaleY) => onUpdateLayer(selected.id, { scaleY })} />
-          <LayerSlider label="Skew" value={selected.skew} min={-45} max={45} step={1} onChange={(skew) => onUpdateLayer(selected.id, { skew })} />
-          <LayerSlider label="Letter spacing" value={selected.letterSpacing} min={-4} max={30} step={1} onChange={(letterSpacing) => onUpdateLayer(selected.id, { letterSpacing })} />
+          <LayerSlider label="Warp" value={selected.warp} min={0} max={1} step={0.01} defaultValue={TEXT_EFFECT_DEFAULTS.warp} onChange={(warp) => onUpdateLayer(selected.id, { warp })} />
+          <LayerSlider label="Rotation" value={selected.rotation} min={-180} max={180} step={1} defaultValue={TEXT_EFFECT_DEFAULTS.rotation} onChange={(rotation) => onUpdateLayer(selected.id, { rotation })} />
+          <LayerSlider label="Horizontal scale" value={selected.scaleX} min={0.25} max={2.5} step={0.01} defaultValue={TEXT_EFFECT_DEFAULTS.scaleX} onChange={(scaleX) => onUpdateLayer(selected.id, { scaleX })} />
+          <LayerSlider label="Vertical scale" value={selected.scaleY} min={0.25} max={2.5} step={0.01} defaultValue={TEXT_EFFECT_DEFAULTS.scaleY} onChange={(scaleY) => onUpdateLayer(selected.id, { scaleY })} />
+          <LayerSlider label="Skew" value={selected.skew} min={-45} max={45} step={1} defaultValue={TEXT_EFFECT_DEFAULTS.skew} onChange={(skew) => onUpdateLayer(selected.id, { skew })} />
+          <LayerSlider label="Letter spacing" value={selected.letterSpacing} min={-4} max={30} step={1} defaultValue={TEXT_EFFECT_DEFAULTS.letterSpacing} onChange={(letterSpacing) => onUpdateLayer(selected.id, { letterSpacing })} />
 
           <div className="control-divider">SIGNAL / GLOW</div>
-          <LayerSlider label="Glow" value={selected.glow} min={0} max={50} step={1} onChange={(glow) => onUpdateLayer(selected.id, { glow })} />
-          <LayerSlider label="Soft blur" value={selected.blur} min={0} max={8} step={0.1} onChange={(blur) => onUpdateLayer(selected.id, { blur })} />
-          <LayerSlider label="Stroke" value={selected.strokeWidth} min={0} max={12} step={0.5} onChange={(strokeWidth) => onUpdateLayer(selected.id, { strokeWidth })} />
+          <LayerSlider label="Glow" value={selected.glow} min={0} max={50} step={1} defaultValue={TEXT_EFFECT_DEFAULTS.glow} onChange={(glow) => onUpdateLayer(selected.id, { glow })} />
+          <LayerSlider label="Soft blur" value={selected.blur} min={0} max={8} step={0.1} defaultValue={TEXT_EFFECT_DEFAULTS.blur} onChange={(blur) => onUpdateLayer(selected.id, { blur })} />
+          <LayerSlider label="Stroke" value={selected.strokeWidth} min={0} max={12} step={0.5} defaultValue={TEXT_EFFECT_DEFAULTS.strokeWidth} onChange={(strokeWidth) => onUpdateLayer(selected.id, { strokeWidth })} />
           {selected.strokeWidth > 0 && (
             <label className="control-row">
               <span className="control-label">Stroke color</span>
               <input type="color" value={selected.strokeColor} onChange={(event) => onUpdateLayer(selected.id, { strokeColor: event.target.value })} />
             </label>
           )}
-          <LayerSlider label="Opacity" value={selected.opacity} min={0} max={1} step={0.01} onChange={(opacity) => onUpdateLayer(selected.id, { opacity })} />
+          <LayerSlider label="Opacity" value={selected.opacity} min={0} max={1} step={0.01} defaultValue={TEXT_EFFECT_DEFAULTS.opacity} onChange={(opacity) => onUpdateLayer(selected.id, { opacity })} />
         </div>
       )}
     </div>
