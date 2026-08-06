@@ -24,8 +24,7 @@ export async function exportGif(
       quality: 10,
       width,
       height,
-      workerScript: `${import.meta.env.BASE_URL}gif.worker.js`,
-    });
+      workerScript: `${import.meta.env.BASE_URL}gif.worker.js`,    });
 
     gif.on('finished', (blob: Blob) => {
       renderer.destroy();
