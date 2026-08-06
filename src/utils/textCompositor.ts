@@ -1,13 +1,29 @@
 import type { CrtSettings, TextLayer } from '../types/crt';
 
 function getFontStack(fontFamily: TextLayer['fontFamily']): string {
-  switch (fontFamily) {
-    case 'VT323':
-      return '"VT323", monospace';
-    case 'Press Start 2P':
-      return '"Press Start 2P", monospace';
-    default:
-      return 'monospace';
+  return fontFamily === 'monospace' ? 'monospace' : `"${fontFamily}", monospace`;
+}
+
+function getTextWidth(ctx: CanvasRenderingContext2D, layer: TextLayer): number {
+  return ctx.measureText(layer.text).width + Math.max(0, layer.text.length - 1) * layer.letterSpacing;
+}
+
+function drawLayerText(ctx: CanvasRenderingContext2D, layer: TextLayer) {
+  const totalWidth = getTextWidth(ctx, layer);
+  let cursor =
+    layer.textAlign === 'center' ? -totalWidth / 2 : layer.textAlign === 'right' ? -totalWidth : 0;
+
+  for (let index = 0; index < layer.text.length; index++) {
+    const character = layer.text[index];
+    const characterWidth = ctx.measureText(character).width;
+    const phase = layer.text.length > 1 ? index / (layer.text.length - 1) : 0;
+    const warpOffset = Math.sin(phase * Math.PI * 2) * layer.warp * layer.fontSize * 0.5;
+
+    if (layer.strokeWidth > 0) {
+      ctx.strokeText(character, cursor, warpOffset);
+    }
+    ctx.fillText(character, cursor, warpOffset);
+    cursor += characterWidth + layer.letterSpacing;
   }
 }
 
@@ -63,9 +79,15 @@ export function drawTextLayers(
     const font = `${layer.fontSize}px ${getFontStack(layer.fontFamily)}`;
 
     textCtx.save();
+    textCtx.translate(x, y);
+    textCtx.rotate((layer.rotation * Math.PI) / 180);
+    textCtx.transform(1, 0, Math.tan((layer.skew * Math.PI) / 180), 1, 0, 0);
+    textCtx.scale(layer.scaleX, layer.scaleY);
     textCtx.globalAlpha = layer.opacity;
     textCtx.font = font;
-    textCtx.textBaseline = 'top';
+    textCtx.textBaseline = 'middle';
+    textCtx.textAlign = 'left';
+    textCtx.filter = layer.blur > 0 ? `blur(${layer.blur}px)` : 'none';
 
     if (layer.glow > 0) {
       textCtx.shadowColor = layer.color;
@@ -73,15 +95,26 @@ export function drawTextLayers(
     }
 
     textCtx.fillStyle = layer.color;
-    textCtx.fillText(layer.text, x, y);
+    textCtx.strokeStyle = layer.strokeColor;
+    textCtx.lineWidth = layer.strokeWidth;
+    textCtx.lineJoin = 'round';
+    drawLayerText(textCtx, layer);
 
     if (selectedLayerId === layer.id) {
-      const metrics = textCtx.measureText(layer.text);
+      const textWidth = getTextWidth(textCtx, layer);
+      const startX =
+        layer.textAlign === 'center' ? -textWidth / 2 : layer.textAlign === 'right' ? -textWidth : 0;
       textCtx.shadowBlur = 0;
-      textCtx.strokeStyle = 'rgba(100, 200, 255, 0.8)';
-      textCtx.lineWidth = 1;
+      textCtx.filter = 'none';
+      textCtx.strokeStyle = '#ffb000';
+      textCtx.lineWidth = 2 / Math.max(layer.scaleX, layer.scaleY);
       textCtx.setLineDash([4, 4]);
-      textCtx.strokeRect(x - 4, y - 4, metrics.width + 8, layer.fontSize + 8);
+      textCtx.strokeRect(
+        startX - 6,
+        -layer.fontSize / 2 - layer.warp * layer.fontSize * 0.5 - 6,
+        textWidth + 12,
+        layer.fontSize * (1 + layer.warp) + 12,
+      );
     }
 
     textCtx.restore();
@@ -113,11 +146,18 @@ export function hitTestTextLayer(
     const y = layer.y * canvasHeight;
     const font = `${layer.fontSize}px ${getFontStack(layer.fontFamily)}`;
     ctx.font = font;
-    const metrics = ctx.measureText(layer.text);
-    const w = metrics.width + 8;
-    const h = layer.fontSize + 8;
+    const textWidth = getTextWidth(ctx, layer) * layer.scaleX;
+    const h = layer.fontSize * (1 + layer.warp) * layer.scaleY;
+    const startX =
+      layer.textAlign === 'center' ? x - textWidth / 2 : layer.textAlign === 'right' ? x - textWidth : x;
+    const padding = Math.max(12, layer.glow, layer.blur * 2);
 
-    if (px >= x - 4 && px <= x - 4 + w && py >= y - 4 && py <= y - 4 + h) {
+    if (
+      px >= startX - padding &&
+      px <= startX + textWidth + padding &&
+      py >= y - h / 2 - padding &&
+      py <= y + h / 2 + padding
+    ) {
       return layer;
     }
   }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   defaultCrtSettings,
   type CrtSettings,
@@ -21,12 +21,28 @@ function createTextLayer(): TextLayer {
     x: 0.1,
     y: 0.1,
     fontSize: 32,
-    color: '#33ff66',
+    color: '#fff4d6',
     fontFamily: 'VT323',
-    glow: 8,
+    textAlign: 'left',
+    glow: 10,
+    blur: 0,
+    strokeWidth: 0,
+    strokeColor: '#e63415',
+    letterSpacing: 0,
+    warp: 0,
+    rotation: 0,
+    scaleX: 1,
+    scaleY: 1,
+    skew: 0,
     opacity: 1,
     locked: false,
   };
+}
+
+interface EditorSnapshot {
+  settings: CrtSettings;
+  textLayers: TextLayer[];
+  crtAffectText: boolean;
 }
 
 export default function App() {
@@ -34,6 +50,8 @@ export default function App() {
   const [textLayers, setTextLayers] = useState<TextLayer[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [crtAffectText, setCrtAffectText] = useState(false);
+  const historyRef = useRef<EditorSnapshot[]>([]);
+  const [historyCount, setHistoryCount] = useState(0);
 
   const {
     media,
@@ -51,25 +69,80 @@ export default function App() {
   const { exportMedia, exporting, progress, error: exportError, clearError: clearExportError } =
     useExporter();
 
+  const pushHistory = useCallback(() => {
+    historyRef.current = [
+      ...historyRef.current.slice(-79),
+      {
+        settings: { ...settings },
+        textLayers: textLayers.map((layer) => ({ ...layer })),
+        crtAffectText,
+      },
+    ];
+    setHistoryCount(historyRef.current.length);
+  }, [settings, textLayers, crtAffectText]);
+
+  const handleUndo = useCallback(() => {
+    const snapshot = historyRef.current.pop();
+    if (!snapshot) return;
+    setSettings(snapshot.settings);
+    setTextLayers(snapshot.textLayers);
+    setCrtAffectText(snapshot.crtAffectText);
+    setSelectedLayerId((current) =>
+      current && snapshot.textLayers.some((layer) => layer.id === current) ? current : null,
+    );
+    setHistoryCount(historyRef.current.length);
+  }, []);
+
+  const handleResetAll = useCallback(() => {
+    pushHistory();
+    setSettings({ ...defaultCrtSettings });
+    setTextLayers([]);
+    setSelectedLayerId(null);
+    setCrtAffectText(false);
+  }, [pushHistory]);
+
+  const handleSettingsChange = useCallback(
+    (next: CrtSettings) => {
+      pushHistory();
+      setSettings(next);
+    },
+    [pushHistory],
+  );
+
+  const handleCrtAffectTextChange = useCallback(
+    (value: boolean) => {
+      pushHistory();
+      setCrtAffectText(value);
+    },
+    [pushHistory],
+  );
+
   const handleAddLayer = useCallback(() => {
+    pushHistory();
     const layer = createTextLayer();
     setTextLayers((prev) => [...prev, layer]);
     setSelectedLayerId(layer.id);
-  }, []);
+  }, [pushHistory]);
 
-  const handleUpdateLayer = useCallback((id: string, partial: Partial<TextLayer>) => {
-    setTextLayers((prev) => prev.map((l) => (l.id === id ? { ...l, ...partial } : l)));
-  }, []);
+  const handleUpdateLayer = useCallback(
+    (id: string, partial: Partial<TextLayer>) => {
+      pushHistory();
+      setTextLayers((prev) => prev.map((l) => (l.id === id ? { ...l, ...partial } : l)));
+    },
+    [pushHistory],
+  );
 
   const handleDeleteLayer = useCallback(
     (id: string) => {
+      pushHistory();
       setTextLayers((prev) => prev.filter((l) => l.id !== id));
       if (selectedLayerId === id) setSelectedLayerId(null);
     },
-    [selectedLayerId],
+    [selectedLayerId, pushHistory],
   );
 
   const handleMoveLayer = useCallback((id: string, direction: 'up' | 'down') => {
+    pushHistory();
     setTextLayers((prev) => {
       const index = prev.findIndex((l) => l.id === id);
       if (index === -1) return prev;
@@ -79,7 +152,24 @@ export default function App() {
       [next[index], next[newIndex]] = [next[newIndex], next[index]];
       return next;
     });
-  }, []);
+  }, [pushHistory]);
+
+  const handleResetLayer = useCallback(
+    (id: string) => {
+      const current = textLayers.find((layer) => layer.id === id);
+      if (!current) return;
+      pushHistory();
+      const defaults = createTextLayer();
+      setTextLayers((prev) =>
+        prev.map((layer) =>
+          layer.id === id
+            ? { ...defaults, id, text: current.text, x: current.x, y: current.y }
+            : layer,
+        ),
+      );
+    },
+    [textLayers, pushHistory],
+  );
 
   const handleExport = useCallback(
     (format: ExportFormat) => {
@@ -102,6 +192,20 @@ export default function App() {
           <span className="title-glow">CRTify</span>
         </h1>
         <p className="app-subtitle">CRT monitor overlay generator</p>
+        <div className="history-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleUndo}
+            disabled={historyCount === 0}
+            title="Undo last editor change"
+          >
+            ↶ Undo
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={handleResetAll}>
+            Reset all
+          </button>
+        </div>
         <ExportPanel
           media={media}
           exporting={exporting}
@@ -128,6 +232,7 @@ export default function App() {
             onAddLayer={handleAddLayer}
             onDeleteLayer={handleDeleteLayer}
             onMoveLayer={handleMoveLayer}
+            onResetLayer={handleResetLayer}
           />
         </aside>
 
@@ -150,9 +255,10 @@ export default function App() {
         <aside className="sidebar sidebar-right">
           <EffectControls
             settings={settings}
-            onChange={setSettings}
+            onChange={handleSettingsChange}
+            onReset={() => handleSettingsChange({ ...defaultCrtSettings })}
             crtAffectText={crtAffectText}
-            onCrtAffectTextChange={setCrtAffectText}
+            onCrtAffectTextChange={handleCrtAffectTextChange}
           />
         </aside>
       </main>

@@ -3,6 +3,7 @@ import type { CrtSettings } from '../types/crt';
 interface EffectControlsProps {
   settings: CrtSettings;
   onChange: (settings: CrtSettings) => void;
+  onReset: () => void;
   crtAffectText: boolean;
   onCrtAffectTextChange: (value: boolean) => void;
 }
@@ -43,6 +44,7 @@ function Slider({
 export function EffectControls({
   settings,
   onChange,
+  onReset,
   crtAffectText,
   onCrtAffectTextChange,
 }: EffectControlsProps) {
@@ -50,7 +52,12 @@ export function EffectControls({
 
   return (
     <div className="effect-controls">
-      <h3>CRT Effects</h3>
+      <div className="section-heading">
+        <h3>CRT Effects</h3>
+        <button type="button" className="btn btn-small" onClick={onReset}>
+          Defaults
+        </button>
+      </div>
 
       <Slider
         label="Curvature"

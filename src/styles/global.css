@@ -1,16 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Black+Ops+One&family=Bungee&family=Orbitron:wght@400;600;800&family=Press+Start+2P&family=Share+Tech+Mono&family=VT323&display=swap');
 
 :root {
-  --bg-dark: #0a0a12;
-  --bg-panel: #12121e;
-  --bg-panel-hover: #1a1a2e;
-  --border: #2a2a40;
-  --text: #e0e0f0;
-  --text-dim: #8888a0;
-  --accent: #33ff66;
-  --accent-dim: #1a9940;
-  --danger: #ff4466;
-  --radius: 6px;
+  --bg-dark: #080706;
+  --bg-panel: #14110e;
+  --bg-panel-hover: #211a14;
+  --border: #4a3728;
+  --text: #fff8e8;
+  --text-dim: #c7aa83;
+  --accent: #ffb000;
+  --accent-dim: #a9460d;
+  --danger: #ef3219;
+  --orange: #f26a16;
+  --cream: #fff4d6;
+  --radius: 2px;
 }
 
 *,
@@ -22,9 +24,11 @@
 }
 
 body {
-  font-family: 'VT323', monospace;
+  font-family: 'Share Tech Mono', 'VT323', monospace;
   font-size: 18px;
-  background: var(--bg-dark);
+  background:
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(255, 176, 0, 0.025) 3px 4px),
+    var(--bg-dark);
   color: var(--text);
   min-height: 100vh;
   line-height: 1.4;
@@ -46,18 +50,24 @@ body {
   gap: 1.5rem;
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
+  background:
+    linear-gradient(90deg, var(--danger) 0 8px, var(--orange) 8px 16px, var(--accent) 16px 24px, transparent 24px),
+    var(--bg-panel);
+  padding-left: 2.75rem;
+  box-shadow: inset 0 -3px 0 #000;
   flex-wrap: wrap;
 }
 
 .app-title {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 1.2rem;
+  font-family: 'Bungee', sans-serif;
+  font-size: 1.45rem;
+  letter-spacing: 0.08em;
+  transform: skew(-7deg);
 }
 
 .title-glow {
-  color: var(--accent);
-  text-shadow: 0 0 10px var(--accent), 0 0 30px var(--accent-dim);
+  color: var(--cream);
+  text-shadow: 3px 3px 0 var(--danger), 6px 6px 0 #000;
 }
 
 .app-subtitle {
@@ -75,7 +85,9 @@ body {
 }
 
 .sidebar {
-  background: var(--bg-panel);
+  background:
+    linear-gradient(180deg, rgba(242, 106, 22, 0.08), transparent 180px),
+    var(--bg-panel);
   border-right: 1px solid var(--border);
   padding: 1rem;
   overflow-y: auto;
@@ -90,8 +102,9 @@ body {
 }
 
 .sidebar h3 {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 0.65rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 800;
   color: var(--accent);
   margin-bottom: 0.75rem;
   letter-spacing: 0.05em;
@@ -102,7 +115,9 @@ body {
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: #06060c;
+  background:
+    radial-gradient(circle at center, #211a14 0, #080706 70%),
+    #080706;
   overflow: hidden;
 }
 
@@ -122,7 +137,9 @@ body {
   object-fit: contain;
   cursor: crosshair;
   border: 1px solid var(--border);
-  box-shadow: 0 0 40px rgba(51, 255, 102, 0.1);
+  border: 6px solid #1d1712;
+  outline: 1px solid var(--border);
+  box-shadow: 0 0 0 3px #000, 0 18px 60px rgba(230, 52, 21, 0.16);
 }
 
 .preview-placeholder {
@@ -244,8 +261,10 @@ body {
 }
 
 .btn {
-  font-family: 'VT323', monospace;
-  font-size: 1.1rem;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   padding: 0.4rem 1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -266,18 +285,21 @@ body {
 }
 
 .btn-primary {
-  background: var(--accent-dim);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--danger);
+  border-color: #ff6a22;
+  color: var(--cream);
+  box-shadow: 3px 3px 0 #000;
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--accent);
-  color: #000;
+  color: #080706;
 }
 
 .btn-secondary {
   margin-top: 0.5rem;
+  border-color: var(--border);
+  background: #0d0b09;
 }
 
 .btn-small {
@@ -307,6 +329,91 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.section-heading h3 {
+  margin-bottom: 0;
+}
+
+.history-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.history-actions .btn {
+  margin-top: 0;
+}
+
+.editor-kicker,
+.control-divider {
+  color: var(--accent);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.control-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0 0.75rem;
+}
+
+.control-divider::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, var(--orange), transparent);
+}
+
+.segmented-control,
+.position-buttons {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.segmented-control button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 48px;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  background: #090806;
+  color: var(--text-dim);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.segmented-control button:first-child {
+  justify-content: flex-start;
+}
+
+.segmented-control button:last-child {
+  justify-content: flex-end;
+}
+
+.segmented-control button.active {
+  color: #080706;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.position-buttons .btn {
+  flex: 1;
+  margin: 0;
 }
 
 .layer-list {
