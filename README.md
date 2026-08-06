@@ -50,7 +50,7 @@ A [`public/_headers`](public/_headers) file is included for Netlify deployments.
 ## Limits
 
 - Max resolution: 1920×1920
-- GIFs: up to 300 frames
+- GIFs: up to 1200 frames, subject to a resolution-aware 768 MB decode guard
 - Video export: up to ~30 seconds at 30fps (browser memory dependent)
 
 ## Tech Stack

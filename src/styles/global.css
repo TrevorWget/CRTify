@@ -129,10 +129,11 @@ body {
   max-height: calc(100vh - 200px);
   object-fit: contain;
   cursor: crosshair;
-  border: 1px solid var(--border);
   border: 6px solid #1d1712;
   outline: 1px solid var(--border);
   box-shadow: 0 0 0 3px #000, 0 18px 60px rgba(230, 52, 21, 0.16);
+  background-color: #fff4d6;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Cpath fill='%23d5c6a8' d='M0 0h12v12H0zm12 12h12v12H12z'/%3E%3C/svg%3E");
 }
 
 .preview-placeholder {

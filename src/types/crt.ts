@@ -55,6 +55,7 @@ export interface TextLayer {
   textAlign: TextAlignment;
   glow: number;
   blur: number;
+  brightness: number;
   strokeWidth: number;
   strokeColor: string;
   letterSpacing: number;

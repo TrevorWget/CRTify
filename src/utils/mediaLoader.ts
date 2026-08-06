@@ -1,7 +1,8 @@
 import { decompressFrames, parseGIF } from 'gifuct-js';
 import type { GifFrame, LoadedMedia, MediaType } from '../types/crt';
 
-const MAX_GIF_FRAMES = 300;
+const MAX_GIF_FRAMES = 1200;
+const MAX_GIF_DECODE_BYTES = 768 * 1024 * 1024;
 const MAX_DIMENSION = 1920;
 
 function detectMediaType(file: File): MediaType {
@@ -39,12 +40,21 @@ function loadVideo(url: string): Promise<HTMLVideoElement> {
 
 async function decodeGif(buffer: ArrayBuffer): Promise<GifFrame[]> {
   const gif = parseGIF(buffer);
-  const frames = decompressFrames(gif, true);
+  const frameCount = gif.frames.length;
+  const estimatedDecodeBytes = gif.lsd.width * gif.lsd.height * 4 * frameCount;
 
-  if (frames.length > MAX_GIF_FRAMES) {
-    throw new Error(`GIF has ${frames.length} frames. Maximum supported is ${MAX_GIF_FRAMES}.`);
+  if (frameCount > MAX_GIF_FRAMES) {
+    throw new Error(`GIF has ${frameCount} frames. Maximum supported is ${MAX_GIF_FRAMES}.`);
   }
 
+  if (estimatedDecodeBytes > MAX_GIF_DECODE_BYTES) {
+    const estimatedMegabytes = Math.ceil(estimatedDecodeBytes / 1024 / 1024);
+    throw new Error(
+      `This GIF needs about ${estimatedMegabytes} MB to decode. Reduce its resolution or frame count.`,
+    );
+  }
+
+  const frames = decompressFrames(gif, true);
   const canvas = document.createElement('canvas');
   canvas.width = gif.lsd.width;
   canvas.height = gif.lsd.height;

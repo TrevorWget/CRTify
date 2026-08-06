@@ -6,6 +6,9 @@ import { imageDataToCanvas } from './mediaLoader';
 
 const frameCanvas = document.createElement('canvas');
 const frameCtx = frameCanvas.getContext('2d')!;
+const encodeCanvas = document.createElement('canvas');
+const encodeCtx = encodeCanvas.getContext('2d')!;
+const GIF_TRANSPARENT_COLOR = 0x01fe01;
 
 export async function exportGif(
   frames: GifFrame[],
@@ -24,7 +27,11 @@ export async function exportGif(
       quality: 10,
       width,
       height,
-      workerScript: `${import.meta.env.BASE_URL}gif.worker.js`,    });
+      // gif.js expects a numeric RGB value at runtime; its community typings
+      // incorrectly declare this option as a string.
+      transparent: GIF_TRANSPARENT_COLOR as unknown as string,
+      workerScript: `${import.meta.env.BASE_URL}gif.worker.js`,
+    });
 
     gif.on('finished', (blob: Blob) => {
       renderer.destroy();
@@ -48,10 +55,18 @@ export async function exportGif(
           frameCtx.putImageData(frames[i].imageData, 0, 0);
 
           const time = i * 0.1;
-          const crtCanvas = renderer.renderFrame(frameCanvas, settings, time);
+          const crtCanvas = renderer.renderFrame(frameCanvas, settings, time, {
+            preserveAlpha: true,
+          });
           drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null);
 
-          gif.addFrame(crtCanvas, { copy: true, delay: frames[i].delay });
+          encodeCanvas.width = width;
+          encodeCanvas.height = height;
+          encodeCtx.fillStyle = '#01fe01';
+          encodeCtx.fillRect(0, 0, width, height);
+          encodeCtx.drawImage(crtCanvas, 0, 0);
+
+          gif.addFrame(encodeCanvas, { copy: true, delay: frames[i].delay });
         }
         gif.render();
       } catch (err) {

@@ -88,7 +88,9 @@ export function drawTextLayers(
     layerCtx.font = font;
     layerCtx.textBaseline = 'middle';
     layerCtx.textAlign = 'left';
-    layerCtx.filter = layer.blur > 0 ? `blur(${layer.blur}px)` : 'none';
+    layerCtx.filter = `brightness(${layer.brightness})${
+      layer.blur > 0 ? ` blur(${layer.blur}px)` : ''
+    }`;
 
     if (layer.glow > 0) {
       layerCtx.shadowColor = layer.color;
