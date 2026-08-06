@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
+  // Required for GitHub Pages project site: https://<user>.github.io/CRTify/
+  base: '/CRTify/',
   plugins: [react()],
   server: {
     headers: {

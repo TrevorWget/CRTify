@@ -30,20 +30,22 @@ Output is in `dist/`.
 
 ## Deployment
 
-CRTify is a static SPA. Video export uses ffmpeg.wasm, which requires these HTTP headers for `SharedArrayBuffer`:
+CRTify is a static SPA served from the `/CRTify/` base path (GitHub Pages project site).
+
+Video export uses ffmpeg.wasm, which requires these HTTP headers for `SharedArrayBuffer`:
 
 ```
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-### Netlify
-
-A [`public/_headers`](public/_headers) file is included for Netlify deployments.
-
 ### GitHub Pages
 
-Use the included GitHub Actions workflow (`.github/workflows/deploy.yml`) or configure your host to send the COOP/COEP headers above.
+The included workflow (`.github/workflows/deploy.yml`) builds and deploys on pushes to `main`. Enable Pages in repo settings with **Source: GitHub Actions**.
+
+### Netlify
+
+A [`public/_headers`](public/_headers) file is included for Netlify deployments. If hosting at the site root (not `/CRTify/`), change `base` in [`vite.config.ts`](vite.config.ts) to `'/'`.
 
 ## Limits
 
