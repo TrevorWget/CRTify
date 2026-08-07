@@ -3,6 +3,7 @@ import {
   defaultCrtSettings,
   type CrtSettings,
   type ExportFormat,
+  type ExportOptionsConfig,
   type TextLayer,
 } from './types/crt';
 import { MediaUploader } from './components/MediaUploader';
@@ -12,6 +13,7 @@ import { TextOverlayEditor } from './components/TextOverlayEditor';
 import { ExportPanel } from './components/ExportPanel';
 import { useMediaLoader } from './hooks/useMediaLoader';
 import { useExporter } from './hooks/useExporter';
+import { defaultExportFilename } from './utils/imageExport';
 import './styles/global.css';
 
 function createTextLayer(): TextLayer {
@@ -30,7 +32,7 @@ function createTextLayer(): TextLayer {
     strokeWidth: 0,
     strokeColor: '#e63415',
     letterSpacing: 0,
-    warp: 0,
+    warp: defaultCrtSettings.curvature,
     rotation: 0,
     scaleX: 1,
     scaleY: 1,
@@ -173,7 +175,7 @@ export default function App() {
   );
 
   const handleExport = useCallback(
-    (format: ExportFormat) => {
+    (format: ExportFormat, exportConfig: ExportOptionsConfig) => {
       if (!media) return;
       exportMedia(format, {
         media,
@@ -181,10 +183,13 @@ export default function App() {
         textLayers,
         crtAffectText,
         gifFrameIndex,
+        exportConfig,
       });
     },
     [media, settings, textLayers, crtAffectText, gifFrameIndex, exportMedia],
   );
+
+  const exportDefaultName = defaultExportFilename(textLayers[0]?.text);
 
   return (
     <div className="app">
@@ -212,6 +217,7 @@ export default function App() {
           exporting={exporting}
           progress={progress}
           error={exportError}
+          defaultName={exportDefaultName}
           onExport={handleExport}
           onClearError={clearExportError}
         />

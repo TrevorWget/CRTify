@@ -120,18 +120,56 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-height: 0;
 }
 
 .preview-output {
   max-width: 100%;
-  max-height: calc(100vh - 200px);
+  max-height: calc(100vh - 260px);
+  width: auto;
+  height: auto;
   object-fit: contain;
   cursor: crosshair;
   border: 6px solid #1d1712;
   outline: 1px solid var(--border);
   box-shadow: 0 0 0 3px #000, 0 18px 60px rgba(230, 52, 21, 0.16);
+  transform-origin: center center;
+}
+
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.zoom-label {
+  min-width: 3.5rem;
+  text-align: center;
+  color: var(--accent);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.7rem;
+}
+
+.preview-stage {
+  width: 100%;
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
 }
 
 .preview-placeholder {
@@ -145,10 +183,6 @@ body {
   display: block;
   margin-bottom: 1rem;
   opacity: 0.3;
-}
-
-.playback-controls {
-  margin-top: 0.75rem;
 }
 
 .drop-zone {
@@ -485,8 +519,59 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   z-index: 100;
-  min-width: 120px;
+  min-width: 280px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.export-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.9rem;
+}
+
+.export-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.export-field input[type='text'] {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+.export-field small {
+  display: block;
+  margin-top: 0.2rem;
+  color: #8d7256;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.export-toggle {
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.export-toggle input[type='checkbox'] {
+  accent-color: var(--accent);
+  width: 18px;
+  height: 18px;
+  margin-top: 0.15rem;
+}
+
+.export-confirm {
+  width: 100%;
 }
 
 .export-option {
@@ -589,7 +674,7 @@ body {
     border-bottom: none;
   }
 
-  .preview-output {
+  .preview-stage {
     max-height: 50vh;
   }
 }

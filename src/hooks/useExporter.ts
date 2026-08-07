@@ -1,7 +1,19 @@
 import { useCallback, useState } from 'react';
-import type { ExportFormat, ExportProgress, LoadedMedia } from '../types/crt';
-import type { CrtSettings, TextLayer } from '../types/crt';
-import { downloadBlob, exportCanvasImage, getExportExtension } from '../utils/imageExport';
+import type {
+  CrtSettings,
+  ExportFormat,
+  ExportOptionsConfig,
+  ExportProgress,
+  LoadedMedia,
+  TextLayer,
+} from '../types/crt';
+import {
+  downloadBlob,
+  exportCanvasImage,
+  getExportScale,
+  scaleCanvas,
+  withExportExtension,
+} from '../utils/imageExport';
 import { exportGif } from '../utils/gifPipeline';
 import { exportVideo, exportVideoViaMediaRecorder } from '../utils/videoPipeline';
 import { CrtRenderer } from '../utils/webgl';
@@ -14,6 +26,7 @@ interface ExportOptions {
   textLayers: TextLayer[];
   crtAffectText: boolean;
   gifFrameIndex: number;
+  exportConfig: ExportOptionsConfig;
 }
 
 export function useExporter() {
@@ -23,13 +36,22 @@ export function useExporter() {
 
   const exportMedia = useCallback(
     async (format: ExportFormat, options: ExportOptions) => {
-      const { media, settings, textLayers, crtAffectText, gifFrameIndex } = options;
+      const {
+        media,
+        settings,
+        textLayers,
+        crtAffectText,
+        gifFrameIndex,
+        exportConfig,
+      } = options;
       setExporting(true);
       setError(null);
       setProgress({ stage: 'Starting export', progress: 0 });
 
       try {
-        const baseName = 'crtify-export';
+        const filename = withExportExtension(exportConfig.filename, format);
+        const { sizeMode, optimize } = exportConfig;
+        const scale = getExportScale(sizeMode);
 
         if (format === 'png' || format === 'jpeg') {
           const renderer = new CrtRenderer();
@@ -50,8 +72,9 @@ export function useExporter() {
             preserveAlpha: format === 'png',
           });
           drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null);
-          const blob = await exportCanvasImage(crtCanvas, format);
-          downloadBlob(blob, `${baseName}.${getExportExtension(format)}`);
+          const outputCanvas = scaleCanvas(crtCanvas, scale);
+          const blob = await exportCanvasImage(outputCanvas, format, optimize);
+          downloadBlob(blob, filename);
           renderer.destroy();
         } else if (format === 'gif') {
           if (!media.gifFrames) throw new Error('No GIF frames to export');
@@ -61,8 +84,10 @@ export function useExporter() {
             textLayers,
             crtAffectText,
             setProgress,
+            sizeMode,
+            optimize,
           );
-          downloadBlob(blob, `${baseName}.gif`);
+          downloadBlob(blob, filename);
         } else if (format === 'mp4' || format === 'webm') {
           if (!media.video) throw new Error('No video to export');
           let blob: Blob;
@@ -74,6 +99,8 @@ export function useExporter() {
               crtAffectText,
               format,
               setProgress,
+              sizeMode,
+              optimize,
             );
           } catch {
             blob = await exportVideoViaMediaRecorder(
@@ -82,9 +109,11 @@ export function useExporter() {
               textLayers,
               crtAffectText,
               setProgress,
+              sizeMode,
+              optimize,
             );
           }
-          downloadBlob(blob, `${baseName}.${getExportExtension(format)}`);
+          downloadBlob(blob, filename);
         }
 
         setProgress({ stage: 'Done', progress: 1 });

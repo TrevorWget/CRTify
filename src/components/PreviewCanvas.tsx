@@ -17,6 +17,10 @@ interface PreviewCanvasProps {
   onGifFrameChange: (index: number) => void;
 }
 
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = 0.25;
+
 export function PreviewCanvas({
   media,
   settings,
@@ -34,6 +38,7 @@ export function PreviewCanvas({
   const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(
     null,
   );
+  const [zoom, setZoom] = useState(1);
 
   const { canvasRef } = useCrtRenderer({
     media,
@@ -100,6 +105,10 @@ export function PreviewCanvas({
     setDragging(null);
   }, []);
 
+  const adjustZoom = useCallback((delta: number) => {
+    setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + delta).toFixed(2)))));
+  }, []);
+
   return (
     <div className="preview-canvas" ref={containerRef}>
       {!media ? (
@@ -109,21 +118,53 @@ export function PreviewCanvas({
         </div>
       ) : (
         <>
-          <canvas
-            ref={canvasRef}
-            className="preview-output"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-          />
-          {(media.type === 'gif' || media.type === 'video') && (
-            <div className="playback-controls">
+          <div className="preview-toolbar">
+            <div className="zoom-controls">
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => adjustZoom(-ZOOM_STEP)}
+                disabled={zoom <= MIN_ZOOM}
+                title="Zoom out"
+              >
+                −
+              </button>
+              <span className="zoom-label">{Math.round(zoom * 100)}%</span>
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => adjustZoom(ZOOM_STEP)}
+                disabled={zoom >= MAX_ZOOM}
+                title="Zoom in"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => setZoom(1)}
+                disabled={zoom === 1}
+              >
+                Reset
+              </button>
+            </div>
+            {(media.type === 'gif' || media.type === 'video') && (
               <button type="button" className="btn btn-small" onClick={onTogglePlay}>
                 {isPlaying ? '⏸ Pause' : '▶ Play'}
               </button>
-            </div>
-          )}
+            )}
+          </div>
+          <div className="preview-stage">
+            <canvas
+              ref={canvasRef}
+              className="preview-output"
+              style={{ transform: `scale(${zoom})` }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+            />
+          </div>
         </>
       )}
     </div>
