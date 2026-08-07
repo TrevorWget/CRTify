@@ -10,7 +10,7 @@ import type {
 import {
   downloadBlob,
   exportCanvasImage,
-  getExportScale,
+  percentToScale,
   scaleCanvas,
   withExportExtension,
 } from '../utils/imageExport';
@@ -50,10 +50,9 @@ export function useExporter() {
 
       try {
         const filename = withExportExtension(exportConfig.filename, format);
-        const { sizeMode, optimize } = exportConfig;
-        const scale = getExportScale(sizeMode);
+        const scale = percentToScale(exportConfig.scalePercent);
 
-        if (format === 'png' || format === 'jpeg') {
+        if (format === 'png' || format === 'jpeg' || format === 'webp') {
           const renderer = new CrtRenderer();
           let source: CanvasImageSource | null = null;
 
@@ -69,11 +68,15 @@ export function useExporter() {
           if (!source) throw new Error('No media to export');
 
           const crtCanvas = renderer.renderFrame(source, settings, 0, {
-            preserveAlpha: format === 'png',
+            preserveAlpha: format === 'png' || format === 'webp',
           });
           drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null);
           const outputCanvas = scaleCanvas(crtCanvas, scale);
-          const blob = await exportCanvasImage(outputCanvas, format, optimize);
+          const blob = await exportCanvasImage(
+            outputCanvas,
+            format,
+            exportConfig.imageQuality,
+          );
           downloadBlob(blob, filename);
           renderer.destroy();
         } else if (format === 'gif') {
@@ -84,12 +87,21 @@ export function useExporter() {
             textLayers,
             crtAffectText,
             setProgress,
-            sizeMode,
-            optimize,
+            {
+              scalePercent: exportConfig.scalePercent,
+              gifQuality: exportConfig.gifQuality,
+              frameSkip: exportConfig.frameSkip,
+              dither: exportConfig.dither,
+            },
           );
           downloadBlob(blob, filename);
         } else if (format === 'mp4' || format === 'webm') {
           if (!media.video) throw new Error('No video to export');
+          const videoSettings = {
+            scalePercent: exportConfig.scalePercent,
+            frameSkip: exportConfig.frameSkip,
+            optimizeVideo: exportConfig.optimizeVideo,
+          };
           let blob: Blob;
           try {
             blob = await exportVideo(
@@ -99,8 +111,7 @@ export function useExporter() {
               crtAffectText,
               format,
               setProgress,
-              sizeMode,
-              optimize,
+              videoSettings,
             );
           } catch {
             blob = await exportVideoViaMediaRecorder(
@@ -109,8 +120,7 @@ export function useExporter() {
               textLayers,
               crtAffectText,
               setProgress,
-              sizeMode,
-              optimize,
+              videoSettings,
             );
           }
           downloadBlob(blob, filename);

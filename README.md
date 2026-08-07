@@ -6,8 +6,8 @@ A browser-based CRT monitor overlay generator. Upload images, GIFs, or videos, a
 
 - **CRT effects**: curvature, scanlines, chromatic aberration, vignette, noise, bloom, phosphor tint, brightness/contrast, flicker
 - **Text overlays**: multiple draggable layers with retro fonts (VT323, Press Start 2P), glow, and opacity
-- **Media support**: PNG/JPEG images, animated GIFs, MP4/WebM videos
-- **Export**: PNG, JPEG, GIF (re-encoded), MP4/WebM (via ffmpeg.wasm or MediaRecorder fallback)
+- **Media support**: PNG/JPEG/WebP images, animated GIFs, MP4/WebM videos
+- **Export**: PNG, JPEG, WebP, GIF (re-encoded), MP4/WebM (via ffmpeg.wasm or MediaRecorder fallback)
 - **Live preview** with play/pause for GIFs and videos
 
 ## Getting Started
@@ -49,9 +49,13 @@ A [`public/_headers`](public/_headers) file is included for Netlify deployments.
 
 ## Limits
 
-- Max resolution: 1920×1920
-- GIFs: up to 1200 frames, subject to a resolution-aware 768 MB decode guard
-- Video export: up to ~30 seconds at 30fps (browser memory dependent)
+These are soft ceilings chosen for browser memory, not hard format limits:
+
+- Max resolution: 4096×4096
+- GIFs: up to 1200 frames, subject to a resolution-aware 1 GB decode guard
+- Video export: up to ~3 minutes at 30fps (~5400 processed frames)
+
+Going higher is possible in theory, but decoded GIFs and ffmpeg.wasm frame buffers can exhaust tab memory and crash the page.
 
 ## Tech Stack
 

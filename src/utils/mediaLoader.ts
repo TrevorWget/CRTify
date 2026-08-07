@@ -1,9 +1,12 @@
 import { decompressFrames, parseGIF } from 'gifuct-js';
 import type { GifFrame, LoadedMedia, MediaType } from '../types/crt';
 
-const MAX_GIF_FRAMES = 1200;
-const MAX_GIF_DECODE_BYTES = 768 * 1024 * 1024;
-const MAX_DIMENSION = 1920;
+export const MAX_GIF_FRAMES = 1200;
+export const MAX_GIF_DECODE_BYTES = 1024 * 1024 * 1024;
+/** Soft ceiling for a single edge; browser WebGL/canvas memory is the real limit. */
+export const MAX_DIMENSION = 4096;
+/** Soft ceiling for ffmpeg.wasm / MediaRecorder exports (~3 min at 30fps). */
+export const MAX_VIDEO_EXPORT_FRAMES = 5400;
 
 function detectMediaType(file: File): MediaType {
   if (file.type.startsWith('image/gif')) return 'gif';
@@ -55,6 +58,7 @@ async function decodeGif(buffer: ArrayBuffer): Promise<GifFrame[]> {
   }
 
   const frames = decompressFrames(gif, true);
+
   const canvas = document.createElement('canvas');
   canvas.width = gif.lsd.width;
   canvas.height = gif.lsd.height;
@@ -104,7 +108,7 @@ async function decodeGif(buffer: ArrayBuffer): Promise<GifFrame[]> {
 
 function checkDimensions(width: number, height: number) {
   if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
-    throw new Error(`Maximum resolution is ${MAX_DIMENSION}x${MAX_DIMENSION}.`);
+    throw new Error(`Maximum resolution is ${MAX_DIMENSION}×${MAX_DIMENSION}.`);
   }
 }
 

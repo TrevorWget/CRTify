@@ -1,5 +1,4 @@
-import type { ExportFormat, ExportSizeMode } from '../types/crt';
-import { EXPORT_SIZE_SCALES } from '../types/crt';
+import type { ExportFormat } from '../types/crt';
 
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -42,42 +41,43 @@ export function scaleCanvas(source: HTMLCanvasElement, scale: number): HTMLCanva
   return canvas;
 }
 
-export function getExportScale(sizeMode: ExportSizeMode): number {
-  return EXPORT_SIZE_SCALES[sizeMode];
+export function percentToScale(scalePercent: number): number {
+  return Math.min(1, Math.max(0.1, scalePercent / 100));
 }
 
-export function getJpegQuality(optimize: boolean): number {
-  return optimize ? 0.72 : 0.92;
-}
-
-export function getGifQuality(optimize: boolean, usesTransparency: boolean): number {
-  if (optimize) return usesTransparency ? 12 : 18;
-  return usesTransparency ? 5 : 10;
-}
-
-export function getVideoBitrate(optimize: boolean, sizeMode: ExportSizeMode): number {
+export function getVideoBitrate(optimize: boolean, scalePercent: number): number {
   const base = optimize ? 1_500_000 : 5_000_000;
-  return Math.round(base * EXPORT_SIZE_SCALES[sizeMode]);
+  return Math.round(base * percentToScale(scalePercent));
 }
 
 export function getVideoCrf(optimize: boolean): number {
   return optimize ? 28 : 23;
 }
 
+export function supportsWebpExport(): boolean {
+  if (typeof document === 'undefined') return false;
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  return canvas.toDataURL('image/webp').startsWith('data:image/webp');
+}
+
 export function exportCanvasImage(
   canvas: HTMLCanvasElement,
-  format: 'png' | 'jpeg',
-  optimize = false,
+  format: 'png' | 'jpeg' | 'webp',
+  quality = 0.92,
 ): Promise<Blob> {
-  const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+  const mimeType =
+    format === 'png' ? 'image/png' : format === 'webp' ? 'image/webp' : 'image/jpeg';
+
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
         if (blob) resolve(blob);
-        else reject(new Error('Failed to export image'));
+        else reject(new Error(`Failed to export ${format.toUpperCase()} image`));
       },
       mimeType,
-      format === 'jpeg' ? getJpegQuality(optimize) : undefined,
+      format === 'png' ? undefined : quality,
     );
   });
 }
@@ -88,6 +88,8 @@ export function getExportExtension(format: ExportFormat): string {
       return 'png';
     case 'jpeg':
       return 'jpg';
+    case 'webp':
+      return 'webp';
     case 'gif':
       return 'gif';
     case 'mp4':

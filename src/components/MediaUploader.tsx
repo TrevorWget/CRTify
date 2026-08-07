@@ -58,7 +58,7 @@ export function MediaUploader({ onFileSelect, loading, media, onClear }: MediaUp
           />
           <span className="drop-icon">⬆</span>
           <span>{loading ? 'Loading...' : 'Drop file or click to upload'}</span>
-          <span className="drop-hint">Images, GIFs, or videos</span>
+          <span className="drop-hint">Images, WebP, GIFs, or videos</span>
         </label>
       )}
     </div>

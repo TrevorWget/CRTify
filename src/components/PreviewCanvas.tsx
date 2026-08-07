@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CrtSettings, LoadedMedia, TextLayer } from '../types/crt';
 import { useCrtRenderer } from '../hooks/useCrtRenderer';
 import { hitTestTextLayer } from '../utils/textCompositor';
@@ -17,8 +17,8 @@ interface PreviewCanvasProps {
   onGifFrameChange: (index: number) => void;
 }
 
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 3;
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.25;
 
 export function PreviewCanvas({
@@ -35,10 +35,12 @@ export function PreviewCanvas({
   onGifFrameChange,
 }: PreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(
     null,
   );
   const [zoom, setZoom] = useState(1);
+  const [fitMode, setFitMode] = useState(true);
 
   const { canvasRef } = useCrtRenderer({
     media,
@@ -50,6 +52,39 @@ export function PreviewCanvas({
     isPlaying,
     onGifFrameChange,
   });
+
+  const computeFitZoom = useCallback(() => {
+    const stage = stageRef.current;
+    const canvas = canvasRef.current;
+    if (!stage || !canvas || !media) return 1;
+
+    const availableWidth = Math.max(1, stage.clientWidth - 24);
+    const availableHeight = Math.max(1, stage.clientHeight - 24);
+    const fit = Math.min(availableWidth / media.width, availableHeight / media.height);
+    return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(fit.toFixed(4))));
+  }, [canvasRef, media]);
+
+  const applyFit = useCallback(() => {
+    setFitMode(true);
+    setZoom(computeFitZoom());
+  }, [computeFitZoom]);
+
+  useEffect(() => {
+    if (!media) return;
+    applyFit();
+  }, [media, applyFit]);
+
+  useEffect(() => {
+    if (!fitMode) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const observer = new ResizeObserver(() => {
+      setZoom(computeFitZoom());
+    });
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [fitMode, computeFitZoom]);
 
   const getCanvasCoords = useCallback(
     (clientX: number, clientY: number) => {
@@ -106,7 +141,10 @@ export function PreviewCanvas({
   }, []);
 
   const adjustZoom = useCallback((delta: number) => {
-    setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + delta).toFixed(2)))));
+    setFitMode(false);
+    setZoom((current) =>
+      Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + delta).toFixed(2)))),
+    );
   }, []);
 
   return (
@@ -141,11 +179,22 @@ export function PreviewCanvas({
               </button>
               <button
                 type="button"
-                className="btn btn-small"
-                onClick={() => setZoom(1)}
-                disabled={zoom === 1}
+                className={`btn btn-small ${fitMode ? 'active' : ''}`}
+                onClick={applyFit}
+                title="Fit preview to window"
               >
-                Reset
+                Fit
+              </button>
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => {
+                  setFitMode(false);
+                  setZoom(1);
+                }}
+                disabled={!fitMode && zoom === 1}
+              >
+                100%
               </button>
             </div>
             {(media.type === 'gif' || media.type === 'video') && (
@@ -154,11 +203,14 @@ export function PreviewCanvas({
               </button>
             )}
           </div>
-          <div className="preview-stage">
+          <div className="preview-stage" ref={stageRef}>
             <canvas
               ref={canvasRef}
               className="preview-output"
-              style={{ transform: `scale(${zoom})` }}
+              style={{
+                width: `${media.width * zoom}px`,
+                height: `${media.height * zoom}px`,
+              }}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
