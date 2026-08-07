@@ -4,10 +4,17 @@ import {
   type ExportFormat,
   type ExportOptionsConfig,
   type ExportProgress,
+  type ExportQueueItem,
+  type ExportRecipe,
   type LoadedMedia,
 } from '../types/crt';
 import { isFrameSequenceMedia } from '../utils/animationMedia';
 import { preferredExportFormat } from '../utils/exportDefaults';
+import {
+  deleteExportRecipe,
+  listExportRecipes,
+  saveExportRecipe,
+} from '../utils/exportRecipes';
 import { defaultExportFilename, supportsWebpExport } from '../utils/imageExport';
 
 interface ExportPanelProps {
@@ -16,7 +23,10 @@ interface ExportPanelProps {
   progress: ExportProgress | null;
   error: string | null;
   defaultName: string;
+  queue: ExportQueueItem[];
   onExport: (format: ExportFormat, config: ExportOptionsConfig) => void;
+  onEnqueue: (format: ExportFormat, config: ExportOptionsConfig) => void;
+  onClearFinished: () => void;
   onClearError: () => void;
 }
 
@@ -28,7 +38,10 @@ export function ExportPanel({
   progress,
   error,
   defaultName,
+  queue,
   onExport,
+  onEnqueue,
+  onClearFinished,
   onClearError,
 }: ExportPanelProps) {
   const [open, setOpen] = useState(false);
@@ -41,6 +54,8 @@ export function ExportPanel({
   const [dither, setDither] = useState(false);
   const [optimizeVideo, setOptimizeVideo] = useState(false);
   const [keepAudio, setKeepAudio] = useState(true);
+  const [recipes, setRecipes] = useState<ExportRecipe[]>(() => listExportRecipes());
+  const [recipeName, setRecipeName] = useState('');
 
   const webpSupported = useMemo(() => supportsWebpExport(), []);
   const animatedSource = isFrameSequenceMedia(media);
@@ -115,6 +130,29 @@ export function ExportPanel({
     setKeepAudio(defaults.keepAudio);
   };
 
+  const currentOptions = (): ExportOptionsConfig => ({
+    filename: filename.trim() || defaultName,
+    scalePercent,
+    imageQuality,
+    gifQuality,
+    frameSkip,
+    dither,
+    optimizeVideo,
+    keepAudio,
+  });
+
+  const applyRecipe = (recipe: ExportRecipe) => {
+    setFormat(recipe.format);
+    setScalePercent(recipe.options.scalePercent);
+    setImageQuality(recipe.options.imageQuality);
+    setGifQuality(recipe.options.gifQuality);
+    setFrameSkip(recipe.options.frameSkip);
+    setDither(recipe.options.dither);
+    setOptimizeVideo(recipe.options.optimizeVideo);
+    setKeepAudio(recipe.options.keepAudio);
+    if (recipe.options.filename) setFilename(recipe.options.filename);
+  };
+
   return (
     <div className="export-panel">
       <button
@@ -126,7 +164,7 @@ export function ExportPanel({
         {exporting ? 'Exporting...' : 'Export ▼'}
       </button>
 
-      {open && media && !exporting && (
+      {open && media && (
         <div className="export-dropdown export-menu">
           <label className="export-field">
             <span>Filename</span>
@@ -284,6 +322,55 @@ export function ExportPanel({
             </label>
           )}
 
+          <div className="export-field">
+            <span>Export recipes</span>
+            <div className="segmented-control wrap">
+              {recipes.map((recipe) => (
+                <span key={recipe.id} className="preset-rack-item">
+                  <button
+                    type="button"
+                    title={recipe.description ?? recipe.name}
+                    onClick={() => applyRecipe(recipe)}
+                  >
+                    {recipe.name}
+                  </button>
+                  {!recipe.builtin && (
+                    <button
+                      type="button"
+                      className="btn-icon btn-danger preset-delete"
+                      title={`Delete ${recipe.name}`}
+                      onClick={() => {
+                        deleteExportRecipe(recipe.id);
+                        setRecipes(listExportRecipes());
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+            <div className="preset-rack-save">
+              <input
+                type="text"
+                placeholder="Recipe name"
+                value={recipeName}
+                onChange={(event) => setRecipeName(event.target.value)}
+              />
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => {
+                  saveExportRecipe(recipeName, format, currentOptions());
+                  setRecipeName('');
+                  setRecipes(listExportRecipes());
+                }}
+              >
+                Save recipe
+              </button>
+            </div>
+          </div>
+
           <div className="export-presets">
             <button type="button" className="btn btn-small" onClick={applyDefaultPreset}>
               Quality defaults
@@ -293,25 +380,50 @@ export function ExportPanel({
             </button>
           </div>
 
-          <button
-            type="button"
-            className="btn btn-primary export-confirm"
-            onClick={() => {
-              onExport(format, {
-                filename: filename.trim() || defaultName,
-                scalePercent,
-                imageQuality,
-                gifQuality,
-                frameSkip,
-                dither,
-                optimizeVideo,
-                keepAudio,
-              });
-              setOpen(false);
-            }}
-          >
-            Download {formatLabel(format)}
-          </button>
+          <div className="export-actions-row">
+            <button
+              type="button"
+              className="btn btn-primary export-confirm"
+              disabled={exporting}
+              onClick={() => {
+                onExport(format, currentOptions());
+              }}
+            >
+              Queue {formatLabel(format)}
+            </button>
+            <button
+              type="button"
+              className="btn btn-small"
+              disabled={exporting}
+              onClick={() => {
+                onEnqueue(format, currentOptions());
+              }}
+            >
+              + Add to queue
+            </button>
+          </div>
+
+          {queue.length > 0 && (
+            <div className="export-queue">
+              <div className="export-queue-head">
+                <span>Batch queue</span>
+                <button type="button" className="btn btn-small" onClick={onClearFinished}>
+                  Clear finished
+                </button>
+              </div>
+              <ul className="export-queue-list">
+                {queue.map((item) => (
+                  <li key={item.id} className={`export-queue-item status-${item.status}`}>
+                    <span>{item.label}</span>
+                    <span className="export-queue-status">
+                      {item.status}
+                      {item.error ? ` · ${item.error}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

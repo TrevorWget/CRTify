@@ -1,10 +1,11 @@
 import type { LayerEffect, TextLayer } from '../types/crt';
-import { hash01 } from './layerEffects';
+import { effectiveIntensity, effectClock, hash01 } from './layerEffects';
 
 const bufferCanvas = document.createElement('canvas');
 const bufferCtx = bufferCanvas.getContext('2d');
 const tintCanvas = document.createElement('canvas');
 const tintCtx = tintCanvas.getContext('2d');
+const mashBuffers = new Map<string, HTMLCanvasElement>();
 
 function prepareBuffer(source: HTMLCanvasElement) {
   if (!bufferCtx) return null;
@@ -21,12 +22,12 @@ function effectStep(effect: LayerEffect, time: number, rate = 24) {
   return Math.floor((time * effect.speed + effect.phase) * rate);
 }
 
-function applyGlitch(canvas: HTMLCanvasElement, effect: LayerEffect, time: number) {
+function applyGlitch(canvas: HTMLCanvasElement, effect: LayerEffect, time: number, intensity: number) {
   const ctx = canvas.getContext('2d');
   if (!ctx || !prepareBuffer(canvas)) return;
   const step = effectStep(effect, time, 18);
-  const slices = Math.max(2, Math.round(3 + effect.intensity * 12));
-  const maxShift = canvas.width * 0.045 * effect.intensity;
+  const slices = Math.max(2, Math.round(3 + intensity * 12));
+  const maxShift = canvas.width * 0.045 * intensity;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bufferCanvas, 0, 0);
 
@@ -42,14 +43,14 @@ function applyGlitch(canvas: HTMLCanvasElement, effect: LayerEffect, time: numbe
   }
 }
 
-function applyStatic(canvas: HTMLCanvasElement, effect: LayerEffect, time: number) {
+function applyStatic(canvas: HTMLCanvasElement, effect: LayerEffect, time: number, intensity: number) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const step = effectStep(effect, time, 30);
-  const count = Math.round(50 + effect.intensity * 500);
+  const count = Math.round(50 + intensity * 500);
   ctx.save();
   ctx.globalCompositeOperation = 'source-atop';
-  ctx.globalAlpha = 0.15 + effect.intensity * 0.5;
+  ctx.globalAlpha = 0.15 + intensity * 0.5;
   for (let index = 0; index < count; index++) {
     const x = hash01(`${effect.id}:${step}:sx:${index}`) * canvas.width;
     const y = hash01(`${effect.id}:${step}:sy:${index}`) * canvas.height;
@@ -82,11 +83,11 @@ function drawTintedSource(
   target.drawImage(tintCanvas, offsetX, 0);
 }
 
-function applyRgbSplit(canvas: HTMLCanvasElement, effect: LayerEffect, time: number) {
+function applyRgbSplit(canvas: HTMLCanvasElement, effect: LayerEffect, time: number, intensity: number) {
   const ctx = canvas.getContext('2d');
   if (!ctx || !prepareBuffer(canvas)) return;
-  const phase = (time * effect.speed + effect.phase) * Math.PI * 2;
-  const offset = Math.sin(phase) * canvas.width * 0.018 * effect.intensity;
+  const phase = effectClock(effect, time) * Math.PI * 2;
+  const offset = Math.sin(phase) * canvas.width * 0.018 * intensity;
   ctx.save();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.globalCompositeOperation = 'screen';
@@ -95,19 +96,119 @@ function applyRgbSplit(canvas: HTMLCanvasElement, effect: LayerEffect, time: num
   ctx.restore();
 }
 
-function applyEcho(canvas: HTMLCanvasElement, effect: LayerEffect, time: number) {
+function applyEcho(canvas: HTMLCanvasElement, effect: LayerEffect, time: number, intensity: number) {
   const ctx = canvas.getContext('2d');
   if (!ctx || !prepareBuffer(canvas)) return;
-  const phase = (time * effect.speed + effect.phase) * Math.PI * 2;
-  const dx = Math.cos(phase) * canvas.width * 0.025 * effect.intensity;
-  const dy = Math.sin(phase) * canvas.height * 0.018 * effect.intensity;
+  const phase = effectClock(effect, time) * Math.PI * 2;
+  const dx = Math.cos(phase) * canvas.width * 0.025 * intensity;
+  const dy = Math.sin(phase) * canvas.height * 0.018 * intensity;
   ctx.save();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (let copy = 3; copy >= 1; copy--) {
-    ctx.globalAlpha = effect.intensity * (0.16 / copy);
+    ctx.globalAlpha = intensity * (0.16 / copy);
     ctx.drawImage(bufferCanvas, dx * copy, dy * copy);
   }
   ctx.globalAlpha = 1;
+  ctx.drawImage(bufferCanvas, 0, 0);
+  ctx.restore();
+}
+
+function applyTrackingTear(
+  canvas: HTMLCanvasElement,
+  effect: LayerEffect,
+  time: number,
+  intensity: number,
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx || !prepareBuffer(canvas)) return;
+  const step = effectStep(effect, time, 12);
+  const bands = Math.max(1, Math.round(1 + intensity * 4));
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bufferCanvas, 0, 0);
+  for (let index = 0; index < bands; index++) {
+    const y =
+      ((hash01(`${effect.id}:${step}:ty:${index}`) + effectClock(effect, time)) % 1) * canvas.height;
+    const h = Math.max(4, Math.round(canvas.height * (0.02 + intensity * 0.06)));
+    const shift = (hash01(`${effect.id}:${step}:tx:${index}`) * 2 - 1) * canvas.width * 0.12 * intensity;
+    ctx.clearRect(0, y, canvas.width, h);
+    ctx.drawImage(bufferCanvas, 0, y, canvas.width, h, shift, y, canvas.width, h);
+    ctx.fillStyle = `rgba(255,255,255,${0.04 * intensity})`;
+    ctx.fillRect(0, y, canvas.width, 1);
+  }
+}
+
+function applyDatamosh(
+  canvas: HTMLCanvasElement,
+  layer: TextLayer,
+  effect: LayerEffect,
+  time: number,
+  intensity: number,
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  let mash = mashBuffers.get(layer.id);
+  if (!mash) {
+    mash = document.createElement('canvas');
+    mashBuffers.set(layer.id, mash);
+  }
+  if (mash.width !== canvas.width || mash.height !== canvas.height) {
+    mash.width = canvas.width;
+    mash.height = canvas.height;
+  }
+  const mashCtx = mash.getContext('2d');
+  if (!mashCtx) return;
+
+  const hold = 0.35 + intensity * 0.55;
+  const step = effectStep(effect, time, 8);
+  const tearY = hash01(`${effect.id}:${step}:my`) * canvas.height;
+  const tearH = canvas.height * (0.08 + intensity * 0.2);
+
+  ctx.save();
+  ctx.globalAlpha = hold;
+  ctx.drawImage(mash, 0, tearY, canvas.width, tearH, 0, tearY, canvas.width, tearH);
+  ctx.restore();
+
+  mashCtx.clearRect(0, 0, mash.width, mash.height);
+  mashCtx.drawImage(canvas, 0, 0);
+}
+
+function applyScanWipe(
+  canvas: HTMLCanvasElement,
+  effect: LayerEffect,
+  time: number,
+  intensity: number,
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx || !prepareBuffer(canvas)) return;
+  const clock = effectClock(effect, time);
+  const wipe = clock * (1 + intensity * 0.25);
+  const edge = wipe * (canvas.width + 40) - 20;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, Math.max(0, edge), canvas.height);
+  ctx.clip();
+  ctx.drawImage(bufferCanvas, 0, 0);
+  ctx.restore();
+  if (edge > 0 && edge < canvas.width) {
+    ctx.fillStyle = `rgba(255, 244, 214, ${0.35 * intensity})`;
+    ctx.fillRect(edge - 2, 0, 3, canvas.height);
+  }
+}
+
+function applyColorCycle(
+  canvas: HTMLCanvasElement,
+  effect: LayerEffect,
+  time: number,
+  intensity: number,
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx || !prepareBuffer(canvas)) return;
+  const degrees = effectClock(effect, time) * 360 * (0.5 + intensity);
+  ctx.save();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.filter = `hue-rotate(${degrees}deg) saturate(${1 + intensity})`;
+  ctx.globalAlpha = 0.65 + intensity * 0.35;
   ctx.drawImage(bufferCanvas, 0, 0);
   ctx.restore();
 }
@@ -119,19 +220,32 @@ export function applyLayerCanvasEffects(
   time: number,
 ) {
   for (const effect of layer.effects ?? []) {
-    if (!effect.enabled || effect.intensity <= 0) continue;
+    const intensity = effectiveIntensity(effect, time);
+    if (intensity <= 0) continue;
     switch (effect.kind) {
       case 'glitch':
-        applyGlitch(canvas, effect, time);
+        applyGlitch(canvas, effect, time, intensity);
         break;
       case 'static':
-        applyStatic(canvas, effect, time);
+        applyStatic(canvas, effect, time, intensity);
         break;
       case 'rgbSplit':
-        applyRgbSplit(canvas, effect, time);
+        applyRgbSplit(canvas, effect, time, intensity);
         break;
       case 'echo':
-        applyEcho(canvas, effect, time);
+        applyEcho(canvas, effect, time, intensity);
+        break;
+      case 'trackingTear':
+        applyTrackingTear(canvas, effect, time, intensity);
+        break;
+      case 'datamosh':
+        applyDatamosh(canvas, layer, effect, time, intensity);
+        break;
+      case 'scanWipe':
+        applyScanWipe(canvas, effect, time, intensity);
+        break;
+      case 'colorCycle':
+        applyColorCycle(canvas, effect, time, intensity);
         break;
     }
   }

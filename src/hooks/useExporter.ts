@@ -248,6 +248,7 @@ export function useExporter() {
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Export failed';
         setError(message);
+        throw err instanceof Error ? err : new Error(message);
       } finally {
         setExporting(false);
       }

@@ -8,6 +8,7 @@ import {
   type FontFamily,
   type LayerEffect,
   type LayerEffectKind,
+  type LayerEffectPreset,
   type LayerKeyframe,
   type OverlayLayerKind,
   type TextLayer,
@@ -19,12 +20,22 @@ import {
   updateKeyframe,
   upsertKeyframe,
 } from '../utils/keyframes';
+import {
+  clonePresetEffects,
+  deleteLayerEffectPreset,
+  listLayerEffectPresets,
+  saveLayerEffectPreset,
+} from '../utils/effectPresets';
 import { CollapsibleSection } from './CollapsibleSection';
 
 const ANIM_FX_FIELD_HELP = {
   Amt: 'How strong the effect is — higher values make the motion or distortion more extreme.',
   Spd: 'How fast the effect cycles over the timeline. 1 is the default rate; higher speeds finish more cycles per loop.',
   Phase: 'Offsets where the cycle starts so stacked effects stay out of sync with each other.',
+  Start: 'Normalized timeline position (0–100%) where this effect becomes active.',
+  End: 'Normalized timeline position (0–100%) where this effect stops.',
+  'Fade In': 'Portion of the active window spent ramping the effect up from zero.',
+  'Fade Out': 'Portion of the active window spent ramping the effect down to zero.',
 } as const;
 
 interface TextOverlayEditorProps {
@@ -38,7 +49,9 @@ interface TextOverlayEditorProps {
   onAddShape: () => void;
   onAddSticker: (file: File) => void;
   onDeleteLayer: (id: string) => void;
+  onDuplicateLayer: (id: string) => void;
   onMoveLayer: (id: string, direction: 'up' | 'down') => void;
+  onReorderLayers: (fromIndex: number, toIndex: number) => void;
   onResetLayer: (id: string) => void;
 }
 
@@ -161,12 +174,18 @@ export function TextOverlayEditor({
   onAddShape,
   onAddSticker,
   onDeleteLayer,
+  onDuplicateLayer,
   onMoveLayer,
+  onReorderLayers,
   onResetLayer,
 }: TextOverlayEditorProps) {
   const stickerInputRef = useRef<HTMLInputElement>(null);
   const fontFileInputRef = useRef<HTMLInputElement>(null);
   const [customFonts, setCustomFonts] = useState<string[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [fxPresets, setFxPresets] = useState<LayerEffectPreset[]>(() => listLayerEffectPresets());
+  const [fxPresetName, setFxPresetName] = useState('');
 
   const selected = layers.find((l) => l.id === selectedLayerId);
 
@@ -255,13 +274,42 @@ export function TextOverlayEditor({
         </div>
       </div>
 
-      <ul className="layer-list">
+      <ul className="layer-list layer-stack">
         {layers.map((layer, index) => (
           <li
             key={layer.id}
-            className={`layer-item ${layer.id === selectedLayerId ? 'selected' : ''}`}
+            className={`layer-item ${layer.id === selectedLayerId ? 'selected' : ''}${
+              dropIndex === index ? ' layer-drop-target' : ''
+            }${dragIndex === index ? ' layer-dragging' : ''}`}
+            draggable
+            onDragStart={(event) => {
+              setDragIndex(index);
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', String(index));
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (dropIndex !== index) setDropIndex(index);
+            }}
+            onDragLeave={() => {
+              if (dropIndex === index) setDropIndex(null);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const from = Number(event.dataTransfer.getData('text/plain'));
+              if (Number.isFinite(from) && from !== index) onReorderLayers(from, index);
+              setDragIndex(null);
+              setDropIndex(null);
+            }}
+            onDragEnd={() => {
+              setDragIndex(null);
+              setDropIndex(null);
+            }}
             onClick={() => onSelectLayer(layer.id)}
           >
+            <span className="layer-stack-handle" title="Drag to reorder" aria-hidden="true">
+              ⋮⋮
+            </span>
             <span className="layer-name">{layerDisplayName(layer)}</span>
             <div className="layer-actions">
               <button
@@ -287,6 +335,17 @@ export function TextOverlayEditor({
                 title="Move down"
               >
                 ↓
+              </button>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDuplicateLayer(layer.id);
+                }}
+                title="Duplicate layer"
+              >
+                ⎘
               </button>
               <button
                 type="button"
@@ -605,6 +664,56 @@ export function TextOverlayEditor({
           </CollapsibleSection>
 
           <CollapsibleSection title="ANIM FX" storageKey="overlay-anim-fx">
+            <div className="fx-preset-rack">
+              <div className="segmented-control wrap">
+                {fxPresets.map((preset) => (
+                  <span key={preset.id} className="preset-rack-item">
+                    <button
+                      type="button"
+                      title={`Apply ${preset.name}`}
+                      onClick={() =>
+                        onUpdateLayer(selected.id, { effects: clonePresetEffects(preset) })
+                      }
+                    >
+                      {preset.name}
+                    </button>
+                    {!preset.builtin && (
+                      <button
+                        type="button"
+                        className="btn-icon btn-danger preset-delete"
+                        title={`Delete ${preset.name}`}
+                        onClick={() => {
+                          deleteLayerEffectPreset(preset.id);
+                          setFxPresets(listLayerEffectPresets());
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+              <div className="preset-rack-save">
+                <input
+                  type="text"
+                  placeholder="FX preset name"
+                  value={fxPresetName}
+                  onChange={(event) => setFxPresetName(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn-small"
+                  disabled={selected.effects.length === 0}
+                  onClick={() => {
+                    saveLayerEffectPreset(fxPresetName, selected.effects);
+                    setFxPresetName('');
+                    setFxPresets(listLayerEffectPresets());
+                  }}
+                >
+                  Save FX
+                </button>
+              </div>
+            </div>
             <div className="keyframe-actions">
               {LAYER_EFFECT_OPTIONS.map((option) => (
                 <button
@@ -679,13 +788,55 @@ export function TextOverlayEditor({
                           onChange={(next) => patchEffect(selected, effect.id, { phase: next })}
                         />
                       </div>
+                      <div className="keyframe-fields effect-fields envelope-fields">
+                        <KeyframeField
+                          label="Start"
+                          help={ANIM_FX_FIELD_HELP.Start}
+                          value={effect.envelopeStart * 100}
+                          min={0}
+                          max={100}
+                          step={1}
+                          onChange={(next) =>
+                            patchEffect(selected, effect.id, { envelopeStart: next / 100 })
+                          }
+                        />
+                        <KeyframeField
+                          label="End"
+                          help={ANIM_FX_FIELD_HELP.End}
+                          value={effect.envelopeEnd * 100}
+                          min={0}
+                          max={100}
+                          step={1}
+                          onChange={(next) =>
+                            patchEffect(selected, effect.id, { envelopeEnd: next / 100 })
+                          }
+                        />
+                        <KeyframeField
+                          label="Fade In"
+                          help={ANIM_FX_FIELD_HELP['Fade In']}
+                          value={effect.fadeIn}
+                          min={0}
+                          max={0.5}
+                          step={0.01}
+                          onChange={(next) => patchEffect(selected, effect.id, { fadeIn: next })}
+                        />
+                        <KeyframeField
+                          label="Fade Out"
+                          help={ANIM_FX_FIELD_HELP['Fade Out']}
+                          value={effect.fadeOut}
+                          min={0}
+                          max={0.5}
+                          step={0.01}
+                          onChange={(next) => patchEffect(selected, effect.id, { fadeOut: next })}
+                        />
+                      </div>
                     </li>
                   );
                 })}
               </ul>
             ) : (
               <small className="keyframe-hint">
-                Procedural motion on top of keyframes — transform, canvas, and shader effects.
+                Procedural motion on top of keyframes — transform, canvas, shader, and text effects.
               </small>
             )}
           </CollapsibleSection>

@@ -12,8 +12,11 @@ import { positionUpdate, resolveLayersForRender } from '../utils/keyframes';
 interface PreviewCanvasProps {
   media: LoadedMedia | null;
   settings: CrtSettings;
+  settingsB?: CrtSettings | null;
+  compareEnabled?: boolean;
   textLayers: TextLayer[];
   crtAffectText: boolean;
+  crtAffectTextB?: boolean;
   selectedLayerId: string | null;
   onSelectLayer: (id: string | null) => void;
   onUpdateLayer: (id: string, partial: Partial<TextLayer>) => void;
@@ -31,8 +34,11 @@ const ZOOM_STEP = 0.25;
 export function PreviewCanvas({
   media,
   settings,
+  settingsB = null,
+  compareEnabled = false,
   textLayers,
   crtAffectText,
+  crtAffectTextB = false,
   selectedLayerId,
   onSelectLayer,
   onUpdateLayer,
@@ -59,10 +65,21 @@ export function PreviewCanvas({
     settings,
     textLayers,
     crtAffectText,
-    selectedLayerId,
+    selectedLayerId: compareEnabled ? null : selectedLayerId,
     gifFrameIndex,
     isPlaying,
     onGifFrameChange,
+  });
+
+  const { canvasRef: canvasRefB } = useCrtRenderer({
+    media,
+    settings: settingsB ?? settings,
+    textLayers,
+    crtAffectText: crtAffectTextB,
+    selectedLayerId: null,
+    gifFrameIndex,
+    isPlaying,
+    onGifFrameChange: undefined,
   });
 
   const computeFitZoom = useCallback(() => {
@@ -306,19 +323,38 @@ export function PreviewCanvas({
               </div>
             )}
           </div>
-          <div className="preview-stage" ref={stageRef}>
-            <canvas
-              ref={canvasRef}
-              className="preview-output"
-              style={{
-                width: `${media.width * zoom}px`,
-                height: `${media.height * zoom}px`,
-              }}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerLeave={handlePointerUp}
-            />
+          <div
+            className={`preview-stage${compareEnabled && settingsB ? ' preview-stage-compare' : ''}`}
+            ref={stageRef}
+          >
+            <div className="preview-compare-pane">
+              {compareEnabled && <span className="compare-badge">A</span>}
+              <canvas
+                ref={canvasRef}
+                className="preview-output"
+                style={{
+                  width: `${media.width * zoom * (compareEnabled ? 0.5 : 1)}px`,
+                  height: `${media.height * zoom * (compareEnabled ? 0.5 : 1)}px`,
+                }}
+                onPointerDown={compareEnabled ? undefined : handlePointerDown}
+                onPointerMove={compareEnabled ? undefined : handlePointerMove}
+                onPointerUp={compareEnabled ? undefined : handlePointerUp}
+                onPointerLeave={compareEnabled ? undefined : handlePointerUp}
+              />
+            </div>
+            {compareEnabled && settingsB && (
+              <div className="preview-compare-pane">
+                <span className="compare-badge">B</span>
+                <canvas
+                  ref={canvasRefB}
+                  className="preview-output"
+                  style={{
+                    width: `${media.width * zoom * 0.5}px`,
+                    height: `${media.height * zoom * 0.5}px`,
+                  }}
+                />
+              </div>
+            )}
           </div>
         </>
       )}

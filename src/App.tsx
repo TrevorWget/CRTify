@@ -3,10 +3,12 @@ import {
   createShapeLayer,
   createTextLayer,
   defaultCrtSettings,
+  duplicateTextLayer,
   type CrtPreset,
   type CrtSettings,
   type ExportFormat,
   type ExportOptionsConfig,
+  type ExportQueueItem,
   type TextLayer,
 } from './types/crt';
 import { MediaUploader } from './components/MediaUploader';
@@ -37,10 +39,16 @@ interface EditorSnapshot {
 
 export default function App() {
   const [settings, setSettings] = useState<CrtSettings>(defaultCrtSettings);
+  const [settingsB, setSettingsB] = useState<CrtSettings>({ ...defaultCrtSettings });
   const [textLayers, setTextLayers] = useState<TextLayer[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [crtAffectText, setCrtAffectText] = useState(false);
+  const [crtAffectTextB, setCrtAffectTextB] = useState(false);
+  const [compareEnabled, setCompareEnabled] = useState(false);
+  const [compareSlot, setCompareSlot] = useState<'A' | 'B'>('A');
   const [videoTime, setVideoTime] = useState(0);
+  const [exportQueue, setExportQueue] = useState<ExportQueueItem[]>([]);
+  const exportQueueBusy = useRef(false);
   const historyRef = useRef<EditorSnapshot[]>([]);
   const redoRef = useRef<EditorSnapshot[]>([]);
   const [historyCount, setHistoryCount] = useState(0);
@@ -158,29 +166,40 @@ export default function App() {
     setCrtAffectText(false);
   }, [pushHistory]);
 
+  const activeSettings = compareEnabled && compareSlot === 'B' ? settingsB : settings;
+  const activeCrtAffectText =
+    compareEnabled && compareSlot === 'B' ? crtAffectTextB : crtAffectText;
+
   const handleSettingsChange = useCallback(
     (next: CrtSettings) => {
       pushHistory();
-      setSettings(next);
+      if (compareEnabled && compareSlot === 'B') setSettingsB(next);
+      else setSettings(next);
     },
-    [pushHistory],
+    [pushHistory, compareEnabled, compareSlot],
   );
 
   const handleCrtAffectTextChange = useCallback(
     (value: boolean) => {
       pushHistory();
-      setCrtAffectText(value);
+      if (compareEnabled && compareSlot === 'B') setCrtAffectTextB(value);
+      else setCrtAffectText(value);
     },
-    [pushHistory],
+    [pushHistory, compareEnabled, compareSlot],
   );
 
   const handleApplyPreset = useCallback(
     (preset: CrtPreset) => {
       pushHistory();
-      setSettings({ ...preset.settings });
-      if (preset.crtAffectText !== undefined) setCrtAffectText(preset.crtAffectText);
+      if (compareEnabled && compareSlot === 'B') {
+        setSettingsB({ ...preset.settings });
+        if (preset.crtAffectText !== undefined) setCrtAffectTextB(preset.crtAffectText);
+      } else {
+        setSettings({ ...preset.settings });
+        if (preset.crtAffectText !== undefined) setCrtAffectText(preset.crtAffectText);
+      }
     },
-    [pushHistory],
+    [pushHistory, compareEnabled, compareSlot],
   );
 
   const handleAddLayer = useCallback(() => {
@@ -254,6 +273,46 @@ export default function App() {
     });
   }, [pushHistory]);
 
+  const handleReorderLayers = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (fromIndex === toIndex) return;
+      pushHistory();
+      setTextLayers((prev) => {
+        if (
+          fromIndex < 0 ||
+          toIndex < 0 ||
+          fromIndex >= prev.length ||
+          toIndex >= prev.length
+        ) {
+          return prev;
+        }
+        const next = [...prev];
+        const [moved] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, moved);
+        return next;
+      });
+    },
+    [pushHistory],
+  );
+
+  const handleDuplicateLayer = useCallback(
+    (id: string) => {
+      const source = textLayers.find((layer) => layer.id === id);
+      if (!source) return;
+      pushHistory();
+      const clone = duplicateTextLayer(source);
+      setTextLayers((prev) => {
+        const index = prev.findIndex((layer) => layer.id === id);
+        if (index === -1) return [...prev, clone];
+        const next = [...prev];
+        next.splice(index + 1, 0, clone);
+        return next;
+      });
+      setSelectedLayerId(clone.id);
+    },
+    [textLayers, pushHistory],
+  );
+
   const handleResetLayer = useCallback(
     (id: string) => {
       const current = textLayers.find((layer) => layer.id === id);
@@ -317,20 +376,84 @@ export default function App() {
   const handleExport = useCallback(
     (format: ExportFormat, exportConfig: ExportOptionsConfig) => {
       if (!media) return;
-      exportMedia(format, {
-        media,
-        settings,
-        textLayers,
-        crtAffectText,
-        gifFrameIndex,
-        exportConfig,
-      });
+      const item: ExportQueueItem = {
+        id: crypto.randomUUID(),
+        label: `${format.toUpperCase()} · ${exportConfig.filename || 'export'}`,
+        format,
+        options: exportConfig,
+        status: 'queued',
+      };
+      setExportQueue((prev) => [...prev, item]);
     },
-    [media, settings, textLayers, crtAffectText, gifFrameIndex, exportMedia],
+    [media],
   );
 
+  const handleEnqueueRecipe = useCallback(
+    (format: ExportFormat, exportConfig: ExportOptionsConfig) => {
+      handleExport(format, exportConfig);
+    },
+    [handleExport],
+  );
+
+  const clearFinishedExports = useCallback(() => {
+    setExportQueue((prev) => prev.filter((item) => item.status === 'queued' || item.status === 'running'));
+  }, []);
+
+  useEffect(() => {
+    if (!media || exportQueueBusy.current || exporting) return;
+    const nextJob = exportQueue.find((item) => item.status === 'queued');
+    if (!nextJob) return;
+
+    exportQueueBusy.current = true;
+    setExportQueue((prev) =>
+      prev.map((item) => (item.id === nextJob.id ? { ...item, status: 'running' } : item)),
+    );
+
+    void exportMedia(nextJob.format, {
+      media,
+      settings,
+      textLayers,
+      crtAffectText,
+      gifFrameIndex,
+      exportConfig: nextJob.options,
+    })
+      .then(() => {
+        setExportQueue((prev) =>
+          prev.map((item) => (item.id === nextJob.id ? { ...item, status: 'done' } : item)),
+        );
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Export failed';
+        setExportQueue((prev) =>
+          prev.map((item) =>
+            item.id === nextJob.id ? { ...item, status: 'error', error: message } : item,
+          ),
+        );
+      })
+      .finally(() => {
+        exportQueueBusy.current = false;
+      });
+  }, [
+    exportQueue,
+    exporting,
+    media,
+    settings,
+    textLayers,
+    crtAffectText,
+    gifFrameIndex,
+    exportMedia,
+  ]);
+
   const exportDefaultName = defaultExportFilename(textLayers[0]?.text);
-  const systemStatus = exporting ? 'ENCODING' : loading ? 'LOADING' : media ? 'MEDIA ONLINE' : 'STANDBY';
+  const systemStatus = exporting
+    ? 'ENCODING'
+    : exportQueue.some((item) => item.status === 'queued' || item.status === 'running')
+      ? 'QUEUE'
+      : loading
+        ? 'LOADING'
+        : media
+          ? 'MEDIA ONLINE'
+          : 'STANDBY';
 
   return (
     <div className="app">
@@ -377,7 +500,10 @@ export default function App() {
           progress={progress}
           error={exportError}
           defaultName={exportDefaultName}
+          queue={exportQueue}
           onExport={handleExport}
+          onEnqueue={handleEnqueueRecipe}
+          onClearFinished={clearFinishedExports}
           onClearError={clearExportError}
         />
       </header>
@@ -407,7 +533,9 @@ export default function App() {
               onAddShape={handleAddShape}
               onAddSticker={handleAddSticker}
               onDeleteLayer={handleDeleteLayer}
+              onDuplicateLayer={handleDuplicateLayer}
               onMoveLayer={handleMoveLayer}
+              onReorderLayers={handleReorderLayers}
               onResetLayer={handleResetLayer}
             />
           </div>
@@ -422,8 +550,11 @@ export default function App() {
           <PreviewCanvas
             media={media}
             settings={settings}
+            settingsB={compareEnabled ? settingsB : null}
+            compareEnabled={compareEnabled}
             textLayers={textLayers}
             crtAffectText={crtAffectText}
+            crtAffectTextB={crtAffectTextB}
             selectedLayerId={selectedLayerId}
             onSelectLayer={setSelectedLayerId}
             onUpdateLayer={handleUpdateLayer}
@@ -444,11 +575,73 @@ export default function App() {
         <aside className="sidebar sidebar-right">
           <div className="sidebar-section sidebar-section-scroll">
             <span className="module-label">03 / SIGNAL PROCESSOR</span>
+            <div className="ab-compare-bar">
+              <label className="effect-enable ab-toggle">
+                <input
+                  type="checkbox"
+                  checked={compareEnabled}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    if (enabled) {
+                      setSettingsB({ ...settings });
+                      setCrtAffectTextB(crtAffectText);
+                      setCompareSlot('A');
+                    }
+                    setCompareEnabled(enabled);
+                  }}
+                />
+                <span>A/B Compare</span>
+              </label>
+              {compareEnabled && (
+                <>
+                  <div className="segmented-control">
+                    <button
+                      type="button"
+                      className={compareSlot === 'A' ? 'active' : ''}
+                      onClick={() => setCompareSlot('A')}
+                    >
+                      Edit A
+                    </button>
+                    <button
+                      type="button"
+                      className={compareSlot === 'B' ? 'active' : ''}
+                      onClick={() => setCompareSlot('B')}
+                    >
+                      Edit B
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-small"
+                    onClick={() => {
+                      pushHistory();
+                      setSettings(settingsB);
+                      setSettingsB(settings);
+                      setCrtAffectText(crtAffectTextB);
+                      setCrtAffectTextB(crtAffectText);
+                    }}
+                  >
+                    Swap A/B
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-small"
+                    onClick={() => {
+                      pushHistory();
+                      setSettingsB({ ...settings });
+                      setCrtAffectTextB(crtAffectText);
+                    }}
+                  >
+                    Copy A→B
+                  </button>
+                </>
+              )}
+            </div>
             <EffectControls
-              settings={settings}
+              settings={activeSettings}
               onChange={handleSettingsChange}
               onReset={() => handleSettingsChange({ ...defaultCrtSettings })}
-              crtAffectText={crtAffectText}
+              crtAffectText={activeCrtAffectText}
               onCrtAffectTextChange={handleCrtAffectTextChange}
               onApplyPreset={handleApplyPreset}
             />

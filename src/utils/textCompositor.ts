@@ -1,5 +1,6 @@
 import type { CrtSettings, TextLayer } from '../types/crt';
 import { resolveLayerForRender } from './keyframes';
+import { resolveEffectText } from './layerEffects';
 import { applyLayerCanvasEffects } from './layerCanvasEffects';
 import { getLayerDistortionOptions, hasLayerDistortion } from './layerShaderEffects';
 import { drawShapeLayer } from './shapeDrawing';
@@ -59,14 +60,15 @@ function drawSpacedLine(
   }
 }
 
-function drawTextBlock(ctx: CanvasRenderingContext2D, layer: TextLayer) {
-  const { lines, widths } = getBlockSize(ctx, layer);
-  const blockHeight = lines.length * layer.fontSize * layer.lineHeight;
+function drawTextBlock(ctx: CanvasRenderingContext2D, layer: TextLayer, displayText?: string) {
+  const drawn = { ...layer, text: displayText ?? layer.text };
+  const { lines, widths } = getBlockSize(ctx, drawn);
+  const blockHeight = lines.length * drawn.fontSize * drawn.lineHeight;
   lines.forEach((line, index) => {
-    const y = -blockHeight / 2 + index * layer.fontSize * layer.lineHeight + layer.fontSize / 2;
+    const y = -blockHeight / 2 + index * drawn.fontSize * drawn.lineHeight + drawn.fontSize / 2;
     ctx.save();
     ctx.translate(0, y);
-    drawSpacedLine(ctx, line, layer.letterSpacing, layer.textAlign, widths[index] || 0);
+    drawSpacedLine(ctx, line, drawn.letterSpacing, drawn.textAlign, widths[index] || 0);
     ctx.restore();
   });
 }
@@ -176,7 +178,7 @@ export function drawTextLayers(
       layerCtx.strokeStyle = layer.strokeColor;
       layerCtx.lineWidth = layer.strokeWidth;
       layerCtx.lineJoin = 'round';
-      drawTextBlock(layerCtx, layer);
+      drawTextBlock(layerCtx, layer, resolveEffectText(layer, timeline));
     } else if (layer.kind === 'shape') {
       if (layer.glow > 0) {
         layerCtx.shadowColor = layer.color;
@@ -190,14 +192,14 @@ export function drawTextLayers(
 
     applyLayerCanvasEffects(layerCanvas, layer, timeline);
 
-    const useDistortion = hasLayerDistortion(layer);
+    const useDistortion = hasLayerDistortion(layer, timeline);
     const useWarp = crtAffectText || layer.warp > 0 || useDistortion;
     if (useWarp) {
       textEffectRenderer ??= new CrtRenderer();
       const effectSettings = getTextEffectSettings(settings, layer.warp, crtAffectText);
       const renderedLayer = textEffectRenderer.renderFrame(layerCanvas, effectSettings, timeline, {
         preserveAlpha: true,
-        layerDistortion: getLayerDistortionOptions(layer),
+        layerDistortion: getLayerDistortionOptions(layer, timeline),
       });
       ctx.drawImage(renderedLayer, 0, 0);
     } else {
