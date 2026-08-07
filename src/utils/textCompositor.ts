@@ -3,8 +3,23 @@ import { CrtRenderer } from './webgl';
 
 let textEffectRenderer: CrtRenderer | null = null;
 
+const scratchCanvas = document.createElement('canvas');
+const scratchCtx = scratchCanvas.getContext('2d');
+
+const measureCanvas = document.createElement('canvas');
+const measureCtx = measureCanvas.getContext('2d');
+
 function getFontStack(fontFamily: TextLayer['fontFamily']): string {
   return fontFamily === 'monospace' ? 'monospace' : `"${fontFamily}", monospace`;
+}
+
+// Canvas filters force a slow compositing path, so only opt in when a layer
+// actually needs one.
+function getLayerFilter(layer: TextLayer): string {
+  const filters: string[] = [];
+  if (layer.brightness !== 1) filters.push(`brightness(${layer.brightness})`);
+  if (layer.blur > 0) filters.push(`blur(${layer.blur}px)`);
+  return filters.length > 0 ? filters.join(' ') : 'none';
 }
 
 function getTextWidth(ctx: CanvasRenderingContext2D, layer: TextLayer): number {
@@ -60,16 +75,17 @@ export function drawTextLayers(
   selectedLayerId: string | null,
 ) {
   const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  if (!ctx || !scratchCtx) return;
 
   const width = canvas.width;
   const height = canvas.height;
 
-  const layerCanvas = document.createElement('canvas');
-  layerCanvas.width = width;
-  layerCanvas.height = height;
-  const layerCtx = layerCanvas.getContext('2d');
-  if (!layerCtx) return;
+  const layerCanvas = scratchCanvas;
+  const layerCtx = scratchCtx;
+  if (layerCanvas.width !== width || layerCanvas.height !== height) {
+    layerCanvas.width = width;
+    layerCanvas.height = height;
+  }
 
   for (const layer of layers) {
     if (!layer.text.trim()) continue;
@@ -88,9 +104,7 @@ export function drawTextLayers(
     layerCtx.font = font;
     layerCtx.textBaseline = 'middle';
     layerCtx.textAlign = 'left';
-    layerCtx.filter = `brightness(${layer.brightness})${
-      layer.blur > 0 ? ` blur(${layer.blur}px)` : ''
-    }`;
+    layerCtx.filter = getLayerFilter(layer);
 
     if (layer.glow > 0) {
       layerCtx.shadowColor = layer.color;
@@ -146,8 +160,7 @@ export function hitTestTextLayer(
   px: number,
   py: number,
 ): TextLayer | null {
-  const measureCanvas = document.createElement('canvas');
-  const ctx = measureCanvas.getContext('2d');
+  const ctx = measureCtx;
   if (!ctx) return null;
 
   for (let i = layers.length - 1; i >= 0; i--) {
