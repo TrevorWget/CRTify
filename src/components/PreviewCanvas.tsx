@@ -7,7 +7,7 @@ import {
   isFrameSequenceMedia,
   isPlayableMedia,
 } from '../utils/animationMedia';
-import { positionUpdate, resolveLayersAtTime } from '../utils/keyframes';
+import { positionUpdate, resolveLayersForRender } from '../utils/keyframes';
 
 interface PreviewCanvasProps {
   media: LoadedMedia | null;
@@ -168,7 +168,7 @@ export function PreviewCanvas({
       // Hit test against animated positions so clicks match what is drawn.
       const timeline = getTimelinePosition(media, gifFrameIndex, videoTime);
       const hit = hitTestTextLayer(
-        resolveLayersAtTime(textLayers, timeline),
+        resolveLayersForRender(textLayers, timeline),
         media.width,
         media.height,
         coords.x,

@@ -1,4 +1,5 @@
 import type { LayerKeyframe, TextLayer } from '../types/crt';
+import { applyLayerEffects } from './layerEffects';
 
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
@@ -106,25 +107,45 @@ export function resolveLayersAtTime(layers: TextLayer[], time: number): TextLaye
   return layers.map((layer) => resolveLayerAtTime(layer, time));
 }
 
+/** Keyframe sample + transform-tier effects — used for draw, hit-test, and export. */
+export function resolveLayerForRender(layer: TextLayer, time: number): TextLayer {
+  return applyLayerEffects(resolveLayerAtTime(layer, time), time);
+}
+
+export function resolveLayersForRender(layers: TextLayer[], time: number): TextLayer[] {
+  return layers.map((layer) => resolveLayerForRender(layer, time));
+}
+
 /**
- * Position edits on a keyframed layer must land on the keyframe at the playhead,
- * otherwise the sampled animation keeps overriding the new base position.
+ * Position edits must land on the authored (pre-effect) pose.
+ * Invert the active effect delta so dragging / Center buttons match what the user sees.
  */
 export function positionUpdate(
   layer: TextLayer,
   position: { x?: number; y?: number },
   time: number,
 ): Partial<TextLayer> {
-  if (!layer.keyframes.length) return position;
+  const keyed = resolveLayerAtTime(layer, time);
+  const rendered = applyLayerEffects(keyed, time);
+  const authoredX =
+    position.x === undefined ? undefined : clamp01(position.x - (rendered.x - keyed.x));
+  const authoredY =
+    position.y === undefined ? undefined : clamp01(position.y - (rendered.y - keyed.y));
 
-  const resolved = resolveLayerAtTime(layer, time);
+  if (!layer.keyframes.length) {
+    return {
+      ...(authoredX !== undefined ? { x: authoredX } : {}),
+      ...(authoredY !== undefined ? { y: authoredY } : {}),
+    };
+  }
+
   const existing = findKeyframeAt(layer.keyframes, time);
   return {
     keyframes: upsertKeyframe(layer.keyframes, {
       t: time,
-      x: position.x ?? resolved.x,
-      y: position.y ?? resolved.y,
-      opacity: existing?.opacity ?? resolved.opacity,
+      x: authoredX ?? keyed.x,
+      y: authoredY ?? keyed.y,
+      opacity: existing?.opacity ?? keyed.opacity,
     }),
   };
 }

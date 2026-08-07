@@ -1,5 +1,5 @@
 import type { CrtSettings, TextLayer } from '../types/crt';
-import { resolveLayerAtTime } from './keyframes';
+import { resolveLayerForRender } from './keyframes';
 import { drawShapeLayer } from './shapeDrawing';
 import { CrtRenderer } from './webgl';
 
@@ -144,7 +144,7 @@ export function drawTextLayers(
   }
 
   for (const rawLayer of layers) {
-    const layer = resolveLayerAtTime(rawLayer, timeline);
+    const layer = resolveLayerForRender(rawLayer, timeline);
     if (!layerIsDrawable(layer)) continue;
 
     layerCtx.clearRect(0, 0, width, height);

@@ -1,9 +1,13 @@
 import { useCallback, useRef, useState } from 'react';
 import {
   BUILTIN_FONTS,
+  LAYER_EFFECT_OPTIONS,
   SHAPE_OPTIONS,
+  createLayerEffect,
   defaultCrtSettings,
   type FontFamily,
+  type LayerEffect,
+  type LayerEffectKind,
   type LayerKeyframe,
   type OverlayLayerKind,
   type TextLayer,
@@ -189,6 +193,20 @@ export function TextOverlayEditor({
 
   const clearKeyframes = (layerId: string) => {
     onUpdateLayer(layerId, { keyframes: [] });
+  };
+
+  const addEffect = (layer: TextLayer, kind: LayerEffectKind) => {
+    onUpdateLayer(layer.id, { effects: [...layer.effects, createLayerEffect(kind)] });
+  };
+
+  const patchEffect = (layer: TextLayer, id: string, patch: Partial<LayerEffect>) => {
+    onUpdateLayer(layer.id, {
+      effects: layer.effects.map((effect) => (effect.id === id ? { ...effect, ...patch } : effect)),
+    });
+  };
+
+  const deleteEffect = (layer: TextLayer, id: string) => {
+    onUpdateLayer(layer.id, { effects: layer.effects.filter((effect) => effect.id !== id) });
   };
 
   const handleStickerChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -572,6 +590,85 @@ export function TextOverlayEditor({
                 }
               />
             </label>
+          )}
+
+          <div className="control-divider">ANIM FX</div>
+          <div className="keyframe-actions">
+            {LAYER_EFFECT_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className="btn btn-small"
+                title={option.description}
+                onClick={() => addEffect(selected, option.id)}
+              >
+                + {option.label}
+              </button>
+            ))}
+          </div>
+          {selected.effects.length > 0 ? (
+            <ul className="keyframe-list">
+              {selected.effects.map((effect, index) => {
+                const meta = LAYER_EFFECT_OPTIONS.find((option) => option.id === effect.kind);
+                return (
+                  <li key={effect.id} className="keyframe-item">
+                    <div className="keyframe-row-head">
+                      <label className="effect-enable">
+                        <input
+                          type="checkbox"
+                          checked={effect.enabled}
+                          onChange={(event) =>
+                            patchEffect(selected, effect.id, { enabled: event.target.checked })
+                          }
+                        />
+                        <span>
+                          #{index + 1} {meta?.label ?? effect.kind}
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        className="btn btn-small keyframe-remove"
+                        onClick={() => deleteEffect(selected, effect.id)}
+                        title="Remove this effect"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <small className="keyframe-hint">{meta?.description}</small>
+                    <div className="keyframe-fields effect-fields">
+                      <KeyframeField
+                        label="Amt"
+                        value={effect.intensity}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(next) => patchEffect(selected, effect.id, { intensity: next })}
+                      />
+                      <KeyframeField
+                        label="Spd"
+                        value={effect.speed}
+                        min={0.05}
+                        max={8}
+                        step={0.05}
+                        onChange={(next) => patchEffect(selected, effect.id, { speed: next })}
+                      />
+                      <KeyframeField
+                        label="Phase"
+                        value={effect.phase}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(next) => patchEffect(selected, effect.id, { phase: next })}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <small className="keyframe-hint">
+              Procedural motion on top of keyframes — jitter, bob, pulse, spin, shake, blink.
+            </small>
           )}
 
           <div className="control-divider">KEYFRAMES</div>

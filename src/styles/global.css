@@ -1969,6 +1969,24 @@ label:focus-within {
   gap: 0.25rem;
 }
 
+.keyframe-fields.effect-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.effect-enable {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--accent-amber, #ffb000);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+}
+
+.effect-enable input {
+  margin: 0;
+}
+
 .keyframe-field {
   display: flex;
   flex-direction: column;

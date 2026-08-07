@@ -2,7 +2,6 @@ import type { CrtSettings, ExportProgress, TextLayer } from '../types/crt';
 import { applyBezelChrome } from './bezelOverlay';
 import { getFFmpeg } from './ffmpegShared';
 import { getVideoBitrate, getVideoCrf, percentToScale } from './imageExport';
-import { resolveLayersAtTime } from './keyframes';
 import { MAX_VIDEO_EXPORT_FRAMES } from './mediaLoader';
 import { drawTextLayers } from './textCompositor';
 import { CrtRenderer } from './webgl';
@@ -62,9 +61,8 @@ export async function exportVideo(
 
       await seekVideo(video, time);
       const timeline = duration > 0 ? time / duration : 0;
-      const layers = resolveLayersAtTime(textLayers, timeline);
       const crtCanvas = renderer.renderFrame(video, settings, time);
-      drawTextLayers(crtCanvas, layers, settings, crtAffectText, null, timeline);
+      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
       let output: HTMLCanvasElement = crtCanvas;
       if (settings.showBezel) output = applyBezelChrome(output);
       scaledCtx.fillStyle = '#000';
@@ -240,9 +238,8 @@ export async function exportVideoViaMediaRecorder(
       }
 
       const timeline = video.duration > 0 ? elapsed / video.duration : 0;
-      const layers = resolveLayersAtTime(textLayers, timeline);
       const crtCanvas = renderer.renderFrame(video, settings, elapsed);
-      drawTextLayers(crtCanvas, layers, settings, crtAffectText, null, timeline);
+      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
       let output: HTMLCanvasElement = crtCanvas;
       if (settings.showBezel) output = applyBezelChrome(output);
       const ctx = outputCanvas.getContext('2d')!;
