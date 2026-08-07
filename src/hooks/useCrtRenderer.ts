@@ -55,6 +55,14 @@ export function useCrtRenderer({
 
     if (!source) return;
 
+    let timeline = 0;
+    if (isFrameSequenceMedia(media) && media.gifFrames) {
+      timeline = gifFrameIndex / Math.max(1, media.gifFrames.length - 1);
+    } else if (media.type === 'video' && media.video) {
+      const duration = media.video.duration;
+      timeline = duration > 0 ? media.video.currentTime / duration : 0;
+    }
+
     const crtCanvas = renderer.renderFrame(source, settings, time, { preserveAlpha: true });
     const displayCanvas = canvasRef.current;
     displayCanvas.width = crtCanvas.width;
@@ -64,7 +72,7 @@ export function useCrtRenderer({
 
     ctx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
     ctx.drawImage(crtCanvas, 0, 0);
-    drawTextLayers(displayCanvas, textLayers, settings, crtAffectText, selectedLayerId);
+    drawTextLayers(displayCanvas, textLayers, settings, crtAffectText, selectedLayerId, timeline);
   }, [media, settings, textLayers, crtAffectText, selectedLayerId, gifFrameIndex]);
 
   useEffect(() => {
