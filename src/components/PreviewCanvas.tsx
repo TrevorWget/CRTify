@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CrtSettings, LoadedMedia, TextLayer } from '../types/crt';
 import { useCrtRenderer } from '../hooks/useCrtRenderer';
 import { hitTestTextLayer } from '../utils/textCompositor';
-import { isPlayableMedia } from '../utils/animationMedia';
+import { getTimelinePosition, isPlayableMedia } from '../utils/animationMedia';
+import { positionUpdate, resolveLayersAtTime } from '../utils/keyframes';
 
 interface PreviewCanvasProps {
   media: LoadedMedia | null;
@@ -37,9 +38,12 @@ export function PreviewCanvas({
 }: PreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
-  const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(
-    null,
-  );
+  const [dragging, setDragging] = useState<{
+    id: string;
+    offsetX: number;
+    offsetY: number;
+    timeline: number;
+  } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [fitMode, setFitMode] = useState(true);
 
@@ -108,20 +112,29 @@ export function PreviewCanvas({
       const coords = getCanvasCoords(e.clientX, e.clientY);
       if (!coords) return;
 
-      const hit = hitTestTextLayer(textLayers, media.width, media.height, coords.x, coords.y);
+      // Hit test against animated positions so clicks match what is drawn.
+      const timeline = getTimelinePosition(media, gifFrameIndex);
+      const hit = hitTestTextLayer(
+        resolveLayersAtTime(textLayers, timeline),
+        media.width,
+        media.height,
+        coords.x,
+        coords.y,
+      );
       if (hit && !hit.locked) {
         onSelectLayer(hit.id);
         setDragging({
           id: hit.id,
           offsetX: coords.x / media.width - hit.x,
           offsetY: coords.y / media.height - hit.y,
+          timeline,
         });
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
       } else {
         onSelectLayer(null);
       }
     },
-    [media, textLayers, getCanvasCoords, onSelectLayer],
+    [media, textLayers, gifFrameIndex, getCanvasCoords, onSelectLayer],
   );
 
   const handlePointerMove = useCallback(
@@ -132,9 +145,12 @@ export function PreviewCanvas({
 
       const x = Math.max(0, Math.min(1, coords.x / media.width - dragging.offsetX));
       const y = Math.max(0, Math.min(1, coords.y / media.height - dragging.offsetY));
-      onUpdateLayer(dragging.id, { x, y });
+
+      const layer = textLayers.find((item) => item.id === dragging.id);
+      if (!layer) return;
+      onUpdateLayer(dragging.id, positionUpdate(layer, { x, y }, dragging.timeline));
     },
-    [dragging, media, getCanvasCoords, onUpdateLayer],
+    [dragging, media, textLayers, getCanvasCoords, onUpdateLayer],
   );
 
   const handlePointerUp = useCallback(() => {
