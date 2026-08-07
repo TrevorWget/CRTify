@@ -19,6 +19,13 @@ import {
   updateKeyframe,
   upsertKeyframe,
 } from '../utils/keyframes';
+import { CollapsibleSection } from './CollapsibleSection';
+
+const ANIM_FX_FIELD_HELP = {
+  Amt: 'How strong the effect is — higher values make the motion or distortion more extreme.',
+  Spd: 'How fast the effect cycles over the timeline. 1 is the default rate; higher speeds finish more cycles per loop.',
+  Phase: 'Offsets where the cycle starts so stacked effects stay out of sync with each other.',
+} as const;
 
 interface TextOverlayEditorProps {
   layers: TextLayer[];
@@ -115,6 +122,7 @@ function KeyframeField({
   max,
   step,
   onChange,
+  help,
 }: {
   label: string;
   value: number;
@@ -122,16 +130,18 @@ function KeyframeField({
   max: number;
   step: number;
   onChange: (value: number) => void;
+  help?: string;
 }) {
   return (
-    <label className="keyframe-field">
-      <span>{label}</span>
+    <label className="keyframe-field" title={help}>
+      <span title={help}>{label}</span>
       <input
         type="number"
         value={Number(value.toFixed(step < 1 ? 2 : 0))}
         min={min}
         max={max}
         step={step}
+        title={help}
         onChange={(event) => {
           const next = Number(event.target.value);
           if (Number.isFinite(next)) onChange(Math.min(max, Math.max(min, next)));
@@ -522,234 +532,246 @@ export function TextOverlayEditor({
             onChange={(opacity) => onUpdateLayer(selected.id, { opacity })}
           />
 
-          <div className="control-divider">DISTORTION</div>
-          <LayerSlider
-            label="Warp"
-            value={selected.warp}
-            min={0}
-            max={1}
-            step={0.01}
-            defaultValue={selected.kind === 'text' ? TEXT_EFFECT_DEFAULTS.warp : 0}
-            onChange={(warp) => onUpdateLayer(selected.id, { warp })}
-          />
-          <LayerSlider
-            label="Skew"
-            value={selected.skew}
-            min={-45}
-            max={45}
-            step={1}
-            defaultValue={TEXT_EFFECT_DEFAULTS.skew}
-            onChange={(skew) => onUpdateLayer(selected.id, { skew })}
-          />
+          <CollapsibleSection title="DISTORTION" storageKey="overlay-distortion">
+            <LayerSlider
+              label="Warp"
+              value={selected.warp}
+              min={0}
+              max={1}
+              step={0.01}
+              defaultValue={selected.kind === 'text' ? TEXT_EFFECT_DEFAULTS.warp : 0}
+              onChange={(warp) => onUpdateLayer(selected.id, { warp })}
+            />
+            <LayerSlider
+              label="Skew"
+              value={selected.skew}
+              min={-45}
+              max={45}
+              step={1}
+              defaultValue={TEXT_EFFECT_DEFAULTS.skew}
+              onChange={(skew) => onUpdateLayer(selected.id, { skew })}
+            />
+          </CollapsibleSection>
 
-          <div className="control-divider">SIGNAL / GLOW</div>
-          <LayerSlider
-            label="Glow"
-            value={selected.glow}
-            min={0}
-            max={50}
-            step={1}
-            defaultValue={selected.kind === 'text' ? TEXT_EFFECT_DEFAULTS.glow : 0}
-            onChange={(glow) => onUpdateLayer(selected.id, { glow })}
-          />
-          <LayerSlider
-            label="Soft blur"
-            value={selected.blur}
-            min={0}
-            max={8}
-            step={0.1}
-            defaultValue={TEXT_EFFECT_DEFAULTS.blur}
-            onChange={(blur) => onUpdateLayer(selected.id, { blur })}
-          />
-          <LayerSlider
-            label="Brightness"
-            value={selected.brightness}
-            min={0.25}
-            max={3}
-            step={0.01}
-            defaultValue={TEXT_EFFECT_DEFAULTS.brightness}
-            onChange={(brightness) => onUpdateLayer(selected.id, { brightness })}
-          />
-          <LayerSlider
-            label="Stroke"
-            value={selected.strokeWidth}
-            min={0}
-            max={12}
-            step={0.5}
-            defaultValue={TEXT_EFFECT_DEFAULTS.strokeWidth}
-            onChange={(strokeWidth) => onUpdateLayer(selected.id, { strokeWidth })}
-          />
-          {selected.strokeWidth > 0 && (
-            <label className="control-row">
-              <span className="control-label">Stroke color</span>
-              <input
-                type="color"
-                value={selected.strokeColor}
-                onChange={(event) =>
-                  onUpdateLayer(selected.id, { strokeColor: event.target.value })
-                }
-              />
-            </label>
-          )}
+          <CollapsibleSection title="SIGNAL / GLOW" storageKey="overlay-signal">
+            <LayerSlider
+              label="Glow"
+              value={selected.glow}
+              min={0}
+              max={50}
+              step={1}
+              defaultValue={selected.kind === 'text' ? TEXT_EFFECT_DEFAULTS.glow : 0}
+              onChange={(glow) => onUpdateLayer(selected.id, { glow })}
+            />
+            <LayerSlider
+              label="Soft blur"
+              value={selected.blur}
+              min={0}
+              max={8}
+              step={0.1}
+              defaultValue={TEXT_EFFECT_DEFAULTS.blur}
+              onChange={(blur) => onUpdateLayer(selected.id, { blur })}
+            />
+            <LayerSlider
+              label="Brightness"
+              value={selected.brightness}
+              min={0.25}
+              max={3}
+              step={0.01}
+              defaultValue={TEXT_EFFECT_DEFAULTS.brightness}
+              onChange={(brightness) => onUpdateLayer(selected.id, { brightness })}
+            />
+            <LayerSlider
+              label="Stroke"
+              value={selected.strokeWidth}
+              min={0}
+              max={12}
+              step={0.5}
+              defaultValue={TEXT_EFFECT_DEFAULTS.strokeWidth}
+              onChange={(strokeWidth) => onUpdateLayer(selected.id, { strokeWidth })}
+            />
+            {selected.strokeWidth > 0 && (
+              <label className="control-row">
+                <span className="control-label">Stroke color</span>
+                <input
+                  type="color"
+                  value={selected.strokeColor}
+                  onChange={(event) =>
+                    onUpdateLayer(selected.id, { strokeColor: event.target.value })
+                  }
+                />
+              </label>
+            )}
+          </CollapsibleSection>
 
-          <div className="control-divider">ANIM FX</div>
-          <div className="keyframe-actions">
-            {LAYER_EFFECT_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className="btn btn-small"
-                title={option.description}
-                onClick={() => addEffect(selected, option.id)}
-              >
-                + {option.label}
-              </button>
-            ))}
-          </div>
-          {selected.effects.length > 0 ? (
-            <ul className="keyframe-list">
-              {selected.effects.map((effect, index) => {
-                const meta = LAYER_EFFECT_OPTIONS.find((option) => option.id === effect.kind);
-                return (
-                  <li key={effect.id} className="keyframe-item">
-                    <div className="keyframe-row-head">
-                      <label className="effect-enable">
-                        <input
-                          type="checkbox"
-                          checked={effect.enabled}
-                          onChange={(event) =>
-                            patchEffect(selected, effect.id, { enabled: event.target.checked })
+          <CollapsibleSection title="ANIM FX" storageKey="overlay-anim-fx">
+            <div className="keyframe-actions">
+              {LAYER_EFFECT_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className="btn btn-small"
+                  title={option.description}
+                  onClick={() => addEffect(selected, option.id)}
+                >
+                  + {option.label}
+                </button>
+              ))}
+            </div>
+            {selected.effects.length > 0 ? (
+              <ul className="keyframe-list">
+                {selected.effects.map((effect, index) => {
+                  const meta = LAYER_EFFECT_OPTIONS.find((option) => option.id === effect.kind);
+                  return (
+                    <li key={effect.id} className="keyframe-item">
+                      <div className="keyframe-row-head">
+                        <label className="effect-enable">
+                          <input
+                            type="checkbox"
+                            checked={effect.enabled}
+                            onChange={(event) =>
+                              patchEffect(selected, effect.id, { enabled: event.target.checked })
+                            }
+                            aria-label={`Enable ${meta?.label ?? effect.kind}`}
+                          />
+                          <span>
+                            #{index + 1} {meta?.label ?? effect.kind}
+                          </span>
+                        </label>
+                        <button
+                          type="button"
+                          className="btn btn-small keyframe-remove"
+                          onClick={() => deleteEffect(selected, effect.id)}
+                          title="Remove this effect"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <small className="keyframe-hint">{meta?.description}</small>
+                      <div className="keyframe-fields effect-fields">
+                        <KeyframeField
+                          label="Amt"
+                          help={ANIM_FX_FIELD_HELP.Amt}
+                          value={effect.intensity}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(next) =>
+                            patchEffect(selected, effect.id, { intensity: next })
                           }
                         />
-                        <span>
-                          #{index + 1} {meta?.label ?? effect.kind}
-                        </span>
-                      </label>
-                      <button
-                        type="button"
-                        className="btn btn-small keyframe-remove"
-                        onClick={() => deleteEffect(selected, effect.id)}
-                        title="Remove this effect"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <small className="keyframe-hint">{meta?.description}</small>
-                    <div className="keyframe-fields effect-fields">
-                      <KeyframeField
-                        label="Amt"
-                        value={effect.intensity}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(next) => patchEffect(selected, effect.id, { intensity: next })}
-                      />
-                      <KeyframeField
-                        label="Spd"
-                        value={effect.speed}
-                        min={0.05}
-                        max={8}
-                        step={0.05}
-                        onChange={(next) => patchEffect(selected, effect.id, { speed: next })}
-                      />
-                      <KeyframeField
-                        label="Phase"
-                        value={effect.phase}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(next) => patchEffect(selected, effect.id, { phase: next })}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <small className="keyframe-hint">
-              Procedural motion on top of keyframes — jitter, bob, pulse, spin, shake, blink.
-            </small>
-          )}
-
-          <div className="control-divider">KEYFRAMES</div>
-          <div className="keyframe-actions">
-            <button
-              type="button"
-              className="btn btn-small"
-              onClick={() => addKeyframe(selected, timeline)}
-              title="Store this layer's current position and opacity at the playhead"
-            >
-              + Keyframe @ {Math.round(timeline * 100)}%
-            </button>
-            <button
-              type="button"
-              className="btn btn-small"
-              onClick={() => clearKeyframes(selected.id)}
-              disabled={selected.keyframes.length === 0}
-            >
-              Clear all
-            </button>
-          </div>
-          {selected.keyframes.length > 0 && (
-            <>
-              <small className="keyframe-hint">
-                Scrub the preview to a frame, then drag the layer to edit its keyframe there.
-              </small>
-              <ul className="keyframe-list">
-                {selected.keyframes.map((kf, index) => (
-                  <li key={kf.id ?? index} className="keyframe-item">
-                    <div className="keyframe-row-head">
-                      <span className="keyframe-index">#{index + 1}</span>
-                      <button
-                        type="button"
-                        className="btn btn-small keyframe-remove"
-                        onClick={() => kf.id && deleteKeyframe(selected, kf.id)}
-                        title="Remove this keyframe"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <div className="keyframe-fields">
-                      <KeyframeField
-                        label="t %"
-                        value={kf.t * 100}
-                        min={0}
-                        max={100}
-                        step={0.5}
-                        onChange={(next) => kf.id && patchKeyframe(selected, kf.id, { t: next / 100 })}
-                      />
-                      <KeyframeField
-                        label="x"
-                        value={kf.x ?? selected.x}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(next) => kf.id && patchKeyframe(selected, kf.id, { x: next })}
-                      />
-                      <KeyframeField
-                        label="y"
-                        value={kf.y ?? selected.y}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(next) => kf.id && patchKeyframe(selected, kf.id, { y: next })}
-                      />
-                      <KeyframeField
-                        label="α"
-                        value={kf.opacity ?? selected.opacity}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(next) =>
-                          kf.id && patchKeyframe(selected, kf.id, { opacity: next })
-                        }
-                      />
-                    </div>
-                  </li>
-                ))}
+                        <KeyframeField
+                          label="Spd"
+                          help={ANIM_FX_FIELD_HELP.Spd}
+                          value={effect.speed}
+                          min={0.05}
+                          max={8}
+                          step={0.05}
+                          onChange={(next) => patchEffect(selected, effect.id, { speed: next })}
+                        />
+                        <KeyframeField
+                          label="Phase"
+                          help={ANIM_FX_FIELD_HELP.Phase}
+                          value={effect.phase}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(next) => patchEffect(selected, effect.id, { phase: next })}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
-            </>
-          )}
+            ) : (
+              <small className="keyframe-hint">
+                Procedural motion on top of keyframes — transform, canvas, and shader effects.
+              </small>
+            )}
+          </CollapsibleSection>
+
+          <CollapsibleSection title="KEYFRAMES" storageKey="overlay-keyframes">
+            <div className="keyframe-actions">
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => addKeyframe(selected, timeline)}
+                title="Store this layer's current position and opacity at the playhead"
+              >
+                + Keyframe @ {Math.round(timeline * 100)}%
+              </button>
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => clearKeyframes(selected.id)}
+                disabled={selected.keyframes.length === 0}
+              >
+                Clear all
+              </button>
+            </div>
+            {selected.keyframes.length > 0 && (
+              <>
+                <small className="keyframe-hint">
+                  Scrub the preview to a frame, then drag the layer to edit its keyframe there.
+                </small>
+                <ul className="keyframe-list">
+                  {selected.keyframes.map((kf, index) => (
+                    <li key={kf.id ?? index} className="keyframe-item">
+                      <div className="keyframe-row-head">
+                        <span className="keyframe-index">#{index + 1}</span>
+                        <button
+                          type="button"
+                          className="btn btn-small keyframe-remove"
+                          onClick={() => kf.id && deleteKeyframe(selected, kf.id)}
+                          title="Remove this keyframe"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="keyframe-fields">
+                        <KeyframeField
+                          label="t %"
+                          value={kf.t * 100}
+                          min={0}
+                          max={100}
+                          step={0.5}
+                          onChange={(next) =>
+                            kf.id && patchKeyframe(selected, kf.id, { t: next / 100 })
+                          }
+                        />
+                        <KeyframeField
+                          label="x"
+                          value={kf.x ?? selected.x}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(next) => kf.id && patchKeyframe(selected, kf.id, { x: next })}
+                        />
+                        <KeyframeField
+                          label="y"
+                          value={kf.y ?? selected.y}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(next) => kf.id && patchKeyframe(selected, kf.id, { y: next })}
+                        />
+                        <KeyframeField
+                          label="α"
+                          value={kf.opacity ?? selected.opacity}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(next) =>
+                            kf.id && patchKeyframe(selected, kf.id, { opacity: next })
+                          }
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </CollapsibleSection>
         </div>
       )}
     </div>
