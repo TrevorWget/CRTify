@@ -698,6 +698,7 @@ body {
   border-top: 1px solid var(--border);
   background: var(--bg-panel);
   text-align: center;
+  flex-shrink: 0;
 }
 
 .app-footer p {
