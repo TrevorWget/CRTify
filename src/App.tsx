@@ -40,7 +40,9 @@ export default function App() {
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [crtAffectText, setCrtAffectText] = useState(false);
   const historyRef = useRef<EditorSnapshot[]>([]);
+  const redoRef = useRef<EditorSnapshot[]>([]);
   const [historyCount, setHistoryCount] = useState(0);
+  const [redoCount, setRedoCount] = useState(0);
 
   const {
     media,
@@ -68,6 +70,29 @@ export default function App() {
     if (shared.textLayers) setTextLayers(shared.textLayers);
   }, []);
 
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      const items = event.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            event.preventDefault();
+            void loadFile(file);
+          }
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [loadFile]);
+
   const pushHistory = useCallback(() => {
     historyRef.current = [
       ...historyRef.current.slice(-79),
@@ -77,20 +102,51 @@ export default function App() {
         crtAffectText,
       },
     ];
+    redoRef.current = [];
     setHistoryCount(historyRef.current.length);
+    setRedoCount(0);
   }, [settings, textLayers, crtAffectText]);
 
-  const handleUndo = useCallback(() => {
-    const snapshot = historyRef.current.pop();
-    if (!snapshot) return;
+  const applySnapshot = useCallback((snapshot: EditorSnapshot) => {
     setSettings(snapshot.settings);
     setTextLayers(snapshot.textLayers);
     setCrtAffectText(snapshot.crtAffectText);
     setSelectedLayerId((current) =>
       current && snapshot.textLayers.some((layer) => layer.id === current) ? current : null,
     );
-    setHistoryCount(historyRef.current.length);
   }, []);
+
+  const handleUndo = useCallback(() => {
+    const snapshot = historyRef.current.pop();
+    if (!snapshot) return;
+    redoRef.current = [
+      ...redoRef.current,
+      {
+        settings: { ...settings },
+        textLayers: textLayers.map((layer) => ({ ...layer })),
+        crtAffectText,
+      },
+    ];
+    applySnapshot(snapshot);
+    setHistoryCount(historyRef.current.length);
+    setRedoCount(redoRef.current.length);
+  }, [settings, textLayers, crtAffectText, applySnapshot]);
+
+  const handleRedo = useCallback(() => {
+    const snapshot = redoRef.current.pop();
+    if (!snapshot) return;
+    historyRef.current = [
+      ...historyRef.current,
+      {
+        settings: { ...settings },
+        textLayers: textLayers.map((layer) => ({ ...layer })),
+        crtAffectText,
+      },
+    ];
+    applySnapshot(snapshot);
+    setHistoryCount(historyRef.current.length);
+    setRedoCount(redoRef.current.length);
+  }, [settings, textLayers, crtAffectText, applySnapshot]);
 
   const handleResetAll = useCallback(() => {
     pushHistory();
@@ -299,6 +355,15 @@ export default function App() {
             title="Undo last editor change"
           >
             ↶ Undo
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleRedo}
+            disabled={redoCount === 0}
+            title="Redo last undone change"
+          >
+            ↷ Redo
           </button>
           <button type="button" className="btn btn-secondary" onClick={handleResetAll}>
             Reset all

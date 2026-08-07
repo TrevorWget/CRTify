@@ -223,6 +223,7 @@ export async function loadMediaFile(file: File): Promise<LoadedMedia> {
   if (!type) throw new Error('Unsupported file type. Use images, GIFs, WebP, or videos.');
 
   const objectUrl = URL.createObjectURL(file);
+  const meta = { sourceFile: file, fileName: file.name };
 
   if (type === 'webp-candidate') {
     const buffer = await file.arrayBuffer();
@@ -231,18 +232,18 @@ export async function loadMediaFile(file: File): Promise<LoadedMedia> {
       const width = gifFrames[0]?.imageData.width ?? 0;
       const height = gifFrames[0]?.imageData.height ?? 0;
       checkDimensions(width, height);
-      return { type: 'webp', width, height, gifFrames, objectUrl };
+      return { type: 'webp', width, height, gifFrames, objectUrl, ...meta };
     }
 
     const image = await loadImage(objectUrl);
     checkDimensions(image.width, image.height);
-    return { type: 'image', width: image.width, height: image.height, image, objectUrl };
+    return { type: 'image', width: image.width, height: image.height, image, objectUrl, ...meta };
   }
 
   if (type === 'image') {
     const image = await loadImage(objectUrl);
     checkDimensions(image.width, image.height);
-    return { type, width: image.width, height: image.height, image, objectUrl };
+    return { type, width: image.width, height: image.height, image, objectUrl, ...meta };
   }
 
   if (type === 'gif') {
@@ -251,7 +252,7 @@ export async function loadMediaFile(file: File): Promise<LoadedMedia> {
     const width = gifFrames[0]?.imageData.width ?? 0;
     const height = gifFrames[0]?.imageData.height ?? 0;
     checkDimensions(width, height);
-    return { type, width, height, gifFrames, objectUrl };
+    return { type, width, height, gifFrames, objectUrl, ...meta };
   }
 
   const video = await loadVideo(objectUrl);
@@ -262,6 +263,7 @@ export async function loadMediaFile(file: File): Promise<LoadedMedia> {
     height: video.videoHeight,
     video,
     objectUrl,
+    ...meta,
   };
 }
 

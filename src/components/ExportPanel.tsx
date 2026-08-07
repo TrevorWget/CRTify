@@ -50,11 +50,9 @@ export function ExportPanel({
     formats.push('png', 'jpeg');
     if (webpSupported) formats.push('webp');
     formats.push('gif');
-    if (media.type === 'video' || animatedSource) {
-      formats.push('mp4', 'webm');
-    }
+    formats.push('mp4', 'webm');
     return formats;
-  }, [media, webpSupported, animatedSource]);
+  }, [media, webpSupported]);
 
   useEffect(() => {
     setFilename(defaultName);

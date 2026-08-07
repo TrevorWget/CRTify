@@ -86,12 +86,34 @@ export function useMediaLoader() {
         }
       }
       if (frames.length === 0) throw new Error('No valid images in batch');
+      // Normalize every still onto a shared canvas so GIF export stays stable.
+      const normalized: GifFrame[] = frames.map((frame) => {
+        if (frame.imageData.width === width && frame.imageData.height === height) return frame;
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, width, height);
+        const temp = document.createElement('canvas');
+        temp.width = frame.imageData.width;
+        temp.height = frame.imageData.height;
+        temp.getContext('2d')!.putImageData(frame.imageData, 0, 0);
+        const scale = Math.min(width / frame.imageData.width, height / frame.imageData.height);
+        const drawW = frame.imageData.width * scale;
+        const drawH = frame.imageData.height * scale;
+        ctx.drawImage(temp, (width - drawW) / 2, (height - drawH) / 2, drawW, drawH);
+        return {
+          imageData: ctx.getImageData(0, 0, width, height),
+          delay: frame.delay,
+        };
+      });
       const loaded: LoadedMedia = {
         type: 'gif',
         width,
         height,
-        gifFrames: frames,
-        fileName: `batch-${frames.length}-frames`,
+        gifFrames: normalized,
+        fileName: `batch-${normalized.length}-frames`,
       };
       mediaRef.current = loaded;
       setMedia(loaded);
