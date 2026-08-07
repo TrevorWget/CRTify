@@ -2,8 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  // Required for GitHub Pages project site: https://<user>.github.io/CRTify/
-  base: '/CRTify/',
+  // Custom domain (https://crtify.trevorwilliams.dev) serves from site root.
+  // For the project URL https://trevorwget.github.io/CRTify/ use base: '/CRTify/' instead.
+  base: '/',
   plugins: [react()],
   server: {
     headers: {
