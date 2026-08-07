@@ -1,8 +1,9 @@
 import GIF from 'gif.js';
-import type { CrtSettings, ExportProgress, GifFrame, TextLayer } from '../types/crt';
+import type { CrtSettings, ExportProgress, ExportSizeMode, GifFrame, TextLayer } from '../types/crt';
 import { CrtRenderer } from './webgl';
 import { drawTextLayers } from './textCompositor';
 import { imageDataToCanvas } from './mediaLoader';
+import { getExportScale, getGifQuality } from './imageExport';
 
 const frameCanvas = document.createElement('canvas');
 const frameCtx = frameCanvas.getContext('2d')!;
@@ -57,13 +58,18 @@ export async function exportGif(
   textLayers: TextLayer[],
   crtAffectText: boolean,
   onProgress: (progress: ExportProgress) => void,
+  sizeMode: ExportSizeMode = 'original',
+  optimize = false,
 ): Promise<Blob> {
   const renderer = new CrtRenderer();
-  const width = frames[0].imageData.width;
-  const height = frames[0].imageData.height;
+  const sourceWidth = frames[0].imageData.width;
+  const sourceHeight = frames[0].imageData.height;
+  const scale = getExportScale(sizeMode);
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
 
-  frameCanvas.width = width;
-  frameCanvas.height = height;
+  frameCanvas.width = sourceWidth;
+  frameCanvas.height = sourceHeight;
   encodeCanvas.width = width;
   encodeCanvas.height = height;
 
@@ -72,9 +78,7 @@ export async function exportGif(
   return new Promise((resolve, reject) => {
     const gif = new GIF({
       workers: 2,
-      // A finer quantizer sample makes NeuQuant far more likely to reserve a
-      // dedicated palette entry for the transparency key.
-      quality: usesTransparency ? 5 : 10,
+      quality: getGifQuality(optimize, usesTransparency),
       width,
       height,
       dither: false,
@@ -101,7 +105,7 @@ export async function exportGif(
             progress: (i / frames.length) * 0.5,
           });
 
-          frameCtx.clearRect(0, 0, width, height);
+          frameCtx.clearRect(0, 0, sourceWidth, sourceHeight);
           frameCtx.putImageData(frames[i].imageData, 0, 0);
 
           const time = i * 0.1;
@@ -111,7 +115,9 @@ export async function exportGif(
           drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null);
 
           encodeCtx.clearRect(0, 0, width, height);
-          encodeCtx.drawImage(crtCanvas, 0, 0);
+          encodeCtx.imageSmoothingEnabled = true;
+          encodeCtx.imageSmoothingQuality = 'high';
+          encodeCtx.drawImage(crtCanvas, 0, 0, width, height);
 
           if (usesTransparency) {
             const imageData = encodeCtx.getImageData(0, 0, width, height);

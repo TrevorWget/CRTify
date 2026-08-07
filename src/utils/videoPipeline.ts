@@ -1,8 +1,9 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL } from '@ffmpeg/util';
-import type { CrtSettings, ExportProgress, TextLayer } from '../types/crt';
+import type { CrtSettings, ExportProgress, ExportSizeMode, TextLayer } from '../types/crt';
 import { CrtRenderer } from './webgl';
 import { drawTextLayers } from './textCompositor';
+import { getExportScale, getVideoBitrate, getVideoCrf } from './imageExport';
 
 let ffmpegInstance: FFmpeg | null = null;
 
@@ -26,23 +27,27 @@ export async function exportVideo(
   crtAffectText: boolean,
   format: 'mp4' | 'webm',
   onProgress: (progress: ExportProgress) => void,
+  sizeMode: ExportSizeMode = 'original',
+  optimize = false,
 ): Promise<Blob> {
   const renderer = new CrtRenderer();
-  const width = video.videoWidth;
-  const height = video.videoHeight;
+  const scale = getExportScale(sizeMode);
+  const width = Math.max(2, Math.round(video.videoWidth * scale) & ~1);
+  const height = Math.max(2, Math.round(video.videoHeight * scale) & ~1);
   const duration = video.duration;
-  const fps = 30;
+  const fps = optimize ? 24 : 30;
   const totalFrames = Math.min(Math.ceil(duration * fps), 900);
-
-  const captureCanvas = document.createElement('canvas');
-  captureCanvas.width = width;
-  captureCanvas.height = height;
+  const scaledCanvas = document.createElement('canvas');
+  scaledCanvas.width = width;
+  scaledCanvas.height = height;
+  const scaledCtx = scaledCanvas.getContext('2d')!;
 
   onProgress({ stage: 'Loading ffmpeg', progress: 0 });
 
   const ffmpeg = await getFFmpeg();
   const ext = format === 'mp4' ? 'mp4' : 'webm';
   const mimeType = format === 'mp4' ? 'video/mp4' : 'video/webm';
+  const crf = getVideoCrf(optimize);
 
   video.currentTime = 0;
   await video.play();
@@ -50,7 +55,7 @@ export async function exportVideo(
 
   try {
     for (let i = 0; i < totalFrames; i++) {
-      const time = (i / fps);
+      const time = i / fps;
       if (time > duration) break;
 
       onProgress({
@@ -61,10 +66,12 @@ export async function exportVideo(
       await seekVideo(video, time);
       const crtCanvas = renderer.renderFrame(video, settings, time);
       drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null);
+      scaledCtx.clearRect(0, 0, width, height);
+      scaledCtx.drawImage(crtCanvas, 0, 0, width, height);
 
-      const blob = await canvasToBlob(crtCanvas, 'image/png');
+      const blob = await canvasToBlob(scaledCanvas, 'image/jpeg');
       const data = new Uint8Array(await blob.arrayBuffer());
-      await ffmpeg.writeFile(`frame${String(i).padStart(5, '0')}.png`, data);
+      await ffmpeg.writeFile(`frame${String(i).padStart(5, '0')}.jpg`, data);
     }
 
     onProgress({ stage: 'Encoding video', progress: 0.75 });
@@ -72,16 +79,20 @@ export async function exportVideo(
     if (format === 'mp4') {
       await ffmpeg.exec([
         '-framerate', String(fps),
-        '-i', 'frame%05d.png',
+        '-i', 'frame%05d.jpg',
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
+        '-crf', String(crf),
+        '-preset', optimize ? 'veryfast' : 'medium',
         '-y', 'output.mp4',
       ]);
     } else {
       await ffmpeg.exec([
         '-framerate', String(fps),
-        '-i', 'frame%05d.png',
+        '-i', 'frame%05d.jpg',
         '-c:v', 'libvpx-vp9',
+        '-b:v', '0',
+        '-crf', String(crf),
         '-y', 'output.webm',
       ]);
     }
@@ -96,7 +107,7 @@ export async function exportVideo(
     const outputBlob = new Blob([bytes], { type: mimeType });
 
     for (let i = 0; i < totalFrames; i++) {
-      await ffmpeg.deleteFile(`frame${String(i).padStart(5, '0')}.png`);
+      await ffmpeg.deleteFile(`frame${String(i).padStart(5, '0')}.jpg`);
     }
     await ffmpeg.deleteFile(`output.${ext}`);
 
@@ -123,6 +134,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error('Canvas export failed'))),
       type,
+      0.92,
     );
   });
 }
@@ -133,21 +145,27 @@ export async function exportVideoViaMediaRecorder(
   textLayers: TextLayer[],
   crtAffectText: boolean,
   onProgress: (progress: ExportProgress) => void,
+  sizeMode: ExportSizeMode = 'original',
+  optimize = false,
 ): Promise<Blob> {
   const renderer = new CrtRenderer();
-  const width = video.videoWidth;
-  const height = video.videoHeight;
+  const scale = getExportScale(sizeMode);
+  const width = Math.max(2, Math.round(video.videoWidth * scale) & ~1);
+  const height = Math.max(2, Math.round(video.videoHeight * scale) & ~1);
 
   const outputCanvas = document.createElement('canvas');
   outputCanvas.width = width;
   outputCanvas.height = height;
 
-  const stream = outputCanvas.captureStream(30);
+  const stream = outputCanvas.captureStream(optimize ? 24 : 30);
   const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
     ? 'video/webm;codecs=vp9'
     : 'video/webm';
 
-  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 5_000_000 });
+  const recorder = new MediaRecorder(stream, {
+    mimeType,
+    videoBitsPerSecond: getVideoBitrate(optimize, sizeMode),
+  });
   const chunks: Blob[] = [];
 
   recorder.ondataavailable = (e) => {
@@ -187,7 +205,8 @@ export async function exportVideoViaMediaRecorder(
       const crtCanvas = renderer.renderFrame(video, settings, elapsed);
       drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null);
       const ctx = outputCanvas.getContext('2d')!;
-      ctx.drawImage(crtCanvas, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(crtCanvas, 0, 0, width, height);
       requestAnimationFrame(renderLoop);
     };
 

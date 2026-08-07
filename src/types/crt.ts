@@ -85,6 +85,20 @@ export interface LoadedMedia {
 
 export type ExportFormat = 'png' | 'jpeg' | 'gif' | 'mp4' | 'webm';
 
+export type ExportSizeMode = 'original' | 'medium' | 'small';
+
+export interface ExportOptionsConfig {
+  filename: string;
+  sizeMode: ExportSizeMode;
+  optimize: boolean;
+}
+
+export const EXPORT_SIZE_SCALES: Record<ExportSizeMode, number> = {
+  original: 1,
+  medium: 0.75,
+  small: 0.5,
+};
+
 export interface ExportProgress {
   stage: string;
   progress: number;

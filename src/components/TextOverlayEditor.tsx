@@ -1,4 +1,4 @@
-import type { FontFamily, TextLayer } from '../types/crt';
+import { defaultCrtSettings, type FontFamily, type TextLayer } from '../types/crt';
 
 interface TextOverlayEditorProps {
   layers: TextLayer[];
@@ -23,7 +23,7 @@ const FONTS: FontFamily[] = [
 ];
 
 const TEXT_EFFECT_DEFAULTS = {
-  warp: 0,
+  warp: defaultCrtSettings.curvature,
   rotation: 0,
   scaleX: 1,
   scaleY: 1,
