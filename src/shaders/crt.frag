@@ -17,6 +17,10 @@ uniform float u_contrast;
 uniform float u_flicker;
 uniform float u_flickerIntensity;
 uniform float u_preserveAlpha;
+uniform float u_rgbMask;
+uniform float u_interlace;
+uniform float u_rollBar;
+uniform float u_phosphorDecay;
 
 varying vec2 v_texCoord;
 
@@ -42,6 +46,12 @@ vec3 sampleImage(vec2 uv) {
 void main() {
   vec2 uv = curveUV(v_texCoord, u_curvature * 0.5);
 
+  // Rolling sync bar shifts the sample vertically.
+  if (u_rollBar > 0.001) {
+    float roll = fract(u_time * 0.15) * u_rollBar * 0.35;
+    uv.y = fract(uv.y + roll);
+  }
+
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
     gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - u_preserveAlpha);
     return;
@@ -50,10 +60,30 @@ void main() {
   vec3 color = sampleImage(uv);
   float alpha = texture2D(u_image, uv).a;
 
+  // Soft phosphor persistence from a slightly earlier sample.
+  if (u_phosphorDecay > 0.001) {
+    vec2 decayUv = curveUV(v_texCoord + vec2(0.0, 0.003 * u_phosphorDecay), u_curvature * 0.5);
+    vec3 ghost = sampleImage(clamp(decayUv, 0.0, 1.0));
+    color = mix(color, max(color, ghost * 0.85), u_phosphorDecay * 0.65);
+  }
+
   // Scanlines belong to the display surface, so their phase must not move
   // when the source image or a text layer uses a different curvature.
   float scanline = sin(v_texCoord.y * u_scanlineCount * 3.14159) * 0.5 + 0.5;
   color *= 1.0 - u_scanlineIntensity * (1.0 - scanline);
+
+  // RGB aperture grille / shadow mask.
+  if (u_rgbMask > 0.001) {
+    float triad = mod(gl_FragCoord.x, 3.0);
+    vec3 mask = triad < 1.0 ? vec3(1.0, 0.2, 0.2) : triad < 2.0 ? vec3(0.2, 1.0, 0.2) : vec3(0.2, 0.2, 1.0);
+    color *= mix(vec3(1.0), mask, u_rgbMask * 0.85);
+  }
+
+  // Interlace: darken alternate fields over time.
+  if (u_interlace > 0.001) {
+    float field = step(0.5, fract((gl_FragCoord.y + floor(u_time * 60.0)) * 0.5));
+    color *= 1.0 - field * u_interlace * 0.45;
+  }
 
   float bloomFactor = max(0.0, dot(color, vec3(0.299, 0.587, 0.114)) - 0.6);
   color += color * bloomFactor * u_bloom;

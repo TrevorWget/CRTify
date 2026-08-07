@@ -1,4 +1,5 @@
 import type { CrtSettings, TextLayer } from '../types/crt';
+import { resolveLayerAtTime } from './keyframes';
 import { CrtRenderer } from './webgl';
 
 let textEffectRenderer: CrtRenderer | null = null;
@@ -13,8 +14,6 @@ function getFontStack(fontFamily: TextLayer['fontFamily']): string {
   return fontFamily === 'monospace' ? 'monospace' : `"${fontFamily}", monospace`;
 }
 
-// Canvas filters force a slow compositing path, so only opt in when a layer
-// actually needs one.
 function getLayerFilter(layer: TextLayer): string {
   const filters: string[] = [];
   if (layer.brightness !== 1) filters.push(`brightness(${layer.brightness})`);
@@ -22,25 +21,76 @@ function getLayerFilter(layer: TextLayer): string {
   return filters.length > 0 ? filters.join(' ') : 'none';
 }
 
-function getTextWidth(ctx: CanvasRenderingContext2D, layer: TextLayer): number {
-  return ctx.measureText(layer.text).width + Math.max(0, layer.text.length - 1) * layer.letterSpacing;
+function getLines(layer: TextLayer): string[] {
+  return (layer.text || '').split('\n');
 }
 
-function drawLayerText(ctx: CanvasRenderingContext2D, layer: TextLayer) {
-  const totalWidth = getTextWidth(ctx, layer);
+function getLineWidth(ctx: CanvasRenderingContext2D, line: string, letterSpacing: number): number {
+  if (!line) return 0;
+  return ctx.measureText(line).width + Math.max(0, line.length - 1) * letterSpacing;
+}
+
+function getBlockSize(ctx: CanvasRenderingContext2D, layer: TextLayer) {
+  const lines = getLines(layer);
+  const widths = lines.map((line) => getLineWidth(ctx, line, layer.letterSpacing));
+  const width = Math.max(0, ...widths, 0);
+  const height = Math.max(layer.fontSize, lines.length * layer.fontSize * layer.lineHeight);
+  return { width, height, lines, widths };
+}
+
+function drawSpacedLine(
+  ctx: CanvasRenderingContext2D,
+  line: string,
+  letterSpacing: number,
+  textAlign: TextLayer['textAlign'],
+  totalWidth: number,
+) {
   let cursor =
-    layer.textAlign === 'center' ? -totalWidth / 2 : layer.textAlign === 'right' ? -totalWidth : 0;
-
-  for (let index = 0; index < layer.text.length; index++) {
-    const character = layer.text[index];
+    textAlign === 'center' ? -totalWidth / 2 : textAlign === 'right' ? -totalWidth : 0;
+  for (let index = 0; index < line.length; index++) {
+    const character = line[index];
     const characterWidth = ctx.measureText(character).width;
-
-    if (layer.strokeWidth > 0) {
-      ctx.strokeText(character, cursor, 0);
-    }
+    if (ctx.lineWidth > 0) ctx.strokeText(character, cursor, 0);
     ctx.fillText(character, cursor, 0);
-    cursor += characterWidth + layer.letterSpacing;
+    cursor += characterWidth + letterSpacing;
   }
+}
+
+function drawTextBlock(ctx: CanvasRenderingContext2D, layer: TextLayer) {
+  const { lines, widths } = getBlockSize(ctx, layer);
+  const blockHeight = lines.length * layer.fontSize * layer.lineHeight;
+  lines.forEach((line, index) => {
+    const y = -blockHeight / 2 + index * layer.fontSize * layer.lineHeight + layer.fontSize / 2;
+    ctx.save();
+    ctx.translate(0, y);
+    drawSpacedLine(ctx, line, layer.letterSpacing, layer.textAlign, widths[index] || 0);
+    ctx.restore();
+  });
+}
+
+function drawShape(ctx: CanvasRenderingContext2D, layer: TextLayer, width: number, height: number) {
+  const w = Math.max(8, width * Math.abs(layer.scaleX));
+  const h = Math.max(8, height * Math.abs(layer.scaleY));
+  ctx.fillStyle = layer.color;
+  ctx.strokeStyle = layer.strokeColor;
+  ctx.lineWidth = layer.strokeWidth;
+  if (layer.shape === 'ellipse') {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (layer.strokeWidth > 0) ctx.stroke();
+  } else {
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    if (layer.strokeWidth > 0) ctx.strokeRect(-w / 2, -h / 2, w, h);
+  }
+}
+
+function drawImageLayer(ctx: CanvasRenderingContext2D, layer: TextLayer, canvasW: number, canvasH: number) {
+  const image = layer.imageElement;
+  if (!image) return;
+  const targetW = Math.max(8, canvasW * Math.abs(layer.scaleX));
+  const targetH = Math.max(8, canvasH * Math.abs(layer.scaleY));
+  ctx.drawImage(image, -targetW / 2, -targetH / 2, targetW, targetH);
 }
 
 function getTextEffectSettings(
@@ -64,7 +114,18 @@ function getTextEffectSettings(
     brightness: 1,
     contrast: 1,
     flicker: false,
+    rgbMask: 0,
+    interlace: 0,
+    rollBar: 0,
+    phosphorDecay: 0,
+    showBezel: false,
   };
+}
+
+function layerIsDrawable(layer: TextLayer): boolean {
+  if (layer.kind === 'image') return Boolean(layer.imageElement || layer.imageUrl);
+  if (layer.kind === 'shape') return true;
+  return Boolean(layer.text.trim());
 }
 
 export function drawTextLayers(
@@ -73,6 +134,7 @@ export function drawTextLayers(
   settings: CrtSettings,
   crtAffectText: boolean,
   selectedLayerId: string | null,
+  timeline = 0,
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx || !scratchCtx) return;
@@ -87,8 +149,9 @@ export function drawTextLayers(
     layerCanvas.height = height;
   }
 
-  for (const layer of layers) {
-    if (!layer.text.trim()) continue;
+  for (const rawLayer of layers) {
+    const layer = resolveLayerAtTime(rawLayer, timeline);
+    if (!layerIsDrawable(layer)) continue;
 
     layerCtx.clearRect(0, 0, width, height);
     const x = layer.x * width;
@@ -99,26 +162,38 @@ export function drawTextLayers(
     layerCtx.translate(x, y);
     layerCtx.rotate((layer.rotation * Math.PI) / 180);
     layerCtx.transform(1, 0, Math.tan((layer.skew * Math.PI) / 180), 1, 0, 0);
-    layerCtx.scale(layer.scaleX, layer.scaleY);
+    if (layer.kind === 'text') {
+      layerCtx.scale(layer.scaleX, layer.scaleY);
+    }
     layerCtx.globalAlpha = layer.opacity;
-    layerCtx.font = font;
-    layerCtx.textBaseline = 'middle';
-    layerCtx.textAlign = 'left';
     layerCtx.filter = getLayerFilter(layer);
 
-    if (layer.glow > 0) {
-      layerCtx.shadowColor = layer.color;
-      layerCtx.shadowBlur = layer.glow;
+    if (layer.kind === 'text') {
+      layerCtx.font = font;
+      layerCtx.textBaseline = 'middle';
+      layerCtx.textAlign = 'left';
+      if (layer.glow > 0) {
+        layerCtx.shadowColor = layer.color;
+        layerCtx.shadowBlur = layer.glow;
+      }
+      layerCtx.fillStyle = layer.color;
+      layerCtx.strokeStyle = layer.strokeColor;
+      layerCtx.lineWidth = layer.strokeWidth;
+      layerCtx.lineJoin = 'round';
+      drawTextBlock(layerCtx, layer);
+    } else if (layer.kind === 'shape') {
+      if (layer.glow > 0) {
+        layerCtx.shadowColor = layer.color;
+        layerCtx.shadowBlur = layer.glow;
+      }
+      drawShape(layerCtx, layer, width, height);
+    } else if (layer.kind === 'image') {
+      drawImageLayer(layerCtx, layer, width, height);
     }
-
-    layerCtx.fillStyle = layer.color;
-    layerCtx.strokeStyle = layer.strokeColor;
-    layerCtx.lineWidth = layer.strokeWidth;
-    layerCtx.lineJoin = 'round';
-    drawLayerText(layerCtx, layer);
     layerCtx.restore();
 
-    if (crtAffectText || layer.warp > 0) {
+    const useWarp = layer.kind === 'text' && (crtAffectText || layer.warp > 0);
+    if (useWarp) {
       textEffectRenderer ??= new CrtRenderer();
       const effectSettings = getTextEffectSettings(settings, layer.warp, crtAffectText);
       const renderedLayer = textEffectRenderer.renderFrame(layerCanvas, effectSettings, 0, {
@@ -134,20 +209,25 @@ export function drawTextLayers(
       ctx.translate(x, y);
       ctx.rotate((layer.rotation * Math.PI) / 180);
       ctx.transform(1, 0, Math.tan((layer.skew * Math.PI) / 180), 1, 0, 0);
-      ctx.scale(layer.scaleX, layer.scaleY);
-      ctx.font = font;
-      const textWidth = getTextWidth(ctx, layer);
-      const startX =
-        layer.textAlign === 'center' ? -textWidth / 2 : layer.textAlign === 'right' ? -textWidth : 0;
       ctx.strokeStyle = '#ffb000';
-      ctx.lineWidth = 2 / Math.max(layer.scaleX, layer.scaleY);
+      ctx.lineWidth = 2;
       ctx.setLineDash([4, 4]);
-      ctx.strokeRect(
-        startX - 6,
-        -layer.fontSize / 2 - 6,
-        textWidth + 12,
-        layer.fontSize + 12,
-      );
+      if (layer.kind === 'text') {
+        ctx.scale(layer.scaleX, layer.scaleY);
+        ctx.font = font;
+        const { width: textWidth, height: textHeight } = getBlockSize(ctx, layer);
+        const startX =
+          layer.textAlign === 'center'
+            ? -textWidth / 2
+            : layer.textAlign === 'right'
+              ? -textWidth
+              : 0;
+        ctx.strokeRect(startX - 6, -textHeight / 2 - 6, textWidth + 12, textHeight + 12);
+      } else {
+        const w = width * Math.abs(layer.scaleX);
+        const h = height * Math.abs(layer.scaleY);
+        ctx.strokeRect(-w / 2 - 6, -h / 2 - 6, w + 12, h + 12);
+      }
       ctx.restore();
     }
   }
@@ -165,26 +245,53 @@ export function hitTestTextLayer(
 
   for (let i = layers.length - 1; i >= 0; i--) {
     const layer = layers[i];
-    if (layer.locked || !layer.text.trim()) continue;
+    if (layer.locked || !layerIsDrawable(layer)) continue;
 
     const x = layer.x * canvasWidth;
     const y = layer.y * canvasHeight;
-    const font = `${layer.fontSize}px ${getFontStack(layer.fontFamily)}`;
-    ctx.font = font;
-    const textWidth = getTextWidth(ctx, layer) * layer.scaleX;
-    const h = layer.fontSize * (1 + layer.warp) * layer.scaleY;
-    const startX =
-      layer.textAlign === 'center' ? x - textWidth / 2 : layer.textAlign === 'right' ? x - textWidth : x;
     const padding = Math.max(12, layer.glow, layer.blur * 2);
 
-    if (
-      px >= startX - padding &&
-      px <= startX + textWidth + padding &&
-      py >= y - h / 2 - padding &&
-      py <= y + h / 2 + padding
-    ) {
-      return layer;
+    if (layer.kind === 'text') {
+      const font = `${layer.fontSize}px ${getFontStack(layer.fontFamily)}`;
+      ctx.font = font;
+      const { width: textWidth, height: textHeight } = getBlockSize(ctx, layer);
+      const scaledW = textWidth * layer.scaleX;
+      const scaledH = textHeight * (1 + layer.warp) * layer.scaleY;
+      const startX =
+        layer.textAlign === 'center'
+          ? x - scaledW / 2
+          : layer.textAlign === 'right'
+            ? x - scaledW
+            : x;
+      if (
+        px >= startX - padding &&
+        px <= startX + scaledW + padding &&
+        py >= y - scaledH / 2 - padding &&
+        py <= y + scaledH / 2 + padding
+      ) {
+        return layer;
+      }
+    } else {
+      const w = canvasWidth * Math.abs(layer.scaleX);
+      const h = canvasHeight * Math.abs(layer.scaleY);
+      if (
+        px >= x - w / 2 - padding &&
+        px <= x + w / 2 + padding &&
+        py >= y - h / 2 - padding &&
+        py <= y + h / 2 + padding
+      ) {
+        return layer;
+      }
     }
   }
   return null;
+}
+
+export async function loadImageElement(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Failed to load overlay image'));
+    image.src = url;
+  });
 }

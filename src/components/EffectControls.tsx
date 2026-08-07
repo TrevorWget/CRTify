@@ -1,4 +1,5 @@
-import { defaultCrtSettings, type CrtSettings } from '../types/crt';
+import { defaultCrtSettings, type CrtPreset, type CrtSettings } from '../types/crt';
+import { PresetRack } from './PresetRack';
 
 interface EffectControlsProps {
   settings: CrtSettings;
@@ -6,6 +7,7 @@ interface EffectControlsProps {
   onReset: () => void;
   crtAffectText: boolean;
   onCrtAffectTextChange: (value: boolean) => void;
+  onApplyPreset: (preset: CrtPreset) => void;
 }
 
 function Slider({
@@ -51,6 +53,7 @@ export function EffectControls({
   onReset,
   crtAffectText,
   onCrtAffectTextChange,
+  onApplyPreset,
 }: EffectControlsProps) {
   const update = (partial: Partial<CrtSettings>) => onChange({ ...settings, ...partial });
 
@@ -215,6 +218,67 @@ export function EffectControls({
           onChange={(e) => onCrtAffectTextChange(e.target.checked)}
         />
       </div>
+
+      <div className="control-divider">PHOSPHOR / MASK</div>
+      <Slider
+        label="RGB Mask"
+        value={settings.rgbMask}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={(v) => update({ rgbMask: v })}
+        onReset={() => update({ rgbMask: defaultCrtSettings.rgbMask })}
+      />
+      <Slider
+        label="Interlace"
+        value={settings.interlace}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={(v) => update({ interlace: v })}
+        onReset={() => update({ interlace: defaultCrtSettings.interlace })}
+      />
+      <Slider
+        label="Roll Bar"
+        value={settings.rollBar}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={(v) => update({ rollBar: v })}
+        onReset={() => update({ rollBar: defaultCrtSettings.rollBar })}
+      />
+      <Slider
+        label="Phosphor Decay"
+        value={settings.phosphorDecay}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={(v) => update({ phosphorDecay: v })}
+        onReset={() => update({ phosphorDecay: defaultCrtSettings.phosphorDecay })}
+      />
+      <div className="control-row toggle-row">
+        <span className="control-label">
+          <button
+            type="button"
+            className="effect-reset-label"
+            onClick={() => update({ showBezel: defaultCrtSettings.showBezel })}
+            title="Reset to default"
+          >
+            Show Bezel
+          </button>
+        </span>
+        <input
+          type="checkbox"
+          checked={settings.showBezel}
+          onChange={(e) => update({ showBezel: e.target.checked })}
+        />
+      </div>
+
+      <PresetRack
+        settings={settings}
+        crtAffectText={crtAffectText}
+        onApply={onApplyPreset}
+      />
     </div>
   );
 }

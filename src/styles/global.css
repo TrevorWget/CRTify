@@ -1793,3 +1793,146 @@ label:focus-within {
     justify-content: center;
   }
 }
+
+/* Preset rack, project dock, overlay editor additions */
+
+.preset-rack {
+  margin-top: 0.5rem;
+}
+
+.preset-rack-list {
+  margin-bottom: 0.5rem;
+}
+
+.preset-rack-item {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.preset-rack-item button:first-child {
+  flex: 1;
+  min-width: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  padding: 0.3rem 0.45rem;
+}
+
+.preset-delete {
+  align-self: center;
+  margin-left: -2px;
+  padding: 0 0.25rem;
+  font-size: 0.85rem;
+}
+
+.preset-rack-save {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.preset-rack-save input {
+  flex: 1;
+  min-height: 30px;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid #6f5431;
+  background: #080706;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 0.78rem;
+}
+
+.project-dock {
+  margin-top: 0.75rem;
+}
+
+.project-dock-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.project-dock-actions .btn {
+  flex: 1;
+  min-width: 90px;
+  margin: 0;
+}
+
+.project-dock-hint {
+  margin-top: 0.45rem;
+  color: #806b4d;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+}
+
+.media-uploader-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.media-uploader-actions .btn {
+  flex: 1;
+  margin: 0;
+}
+
+.media-paste-hint {
+  margin-top: 0.45rem;
+  text-align: center;
+}
+
+.layer-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.layer-add-actions .btn {
+  margin: 0;
+}
+
+.control-row textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #6f5431;
+  border-top-color: #2d2116;
+  border-left-color: #2d2116;
+  border-radius: 0;
+  color: var(--accent);
+  background: #080706;
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+  box-shadow: inset 0 0 8px #000;
+}
+
+.keyframe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.keyframe-actions .btn {
+  margin: 0;
+}
+
+.keyframe-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.keyframe-item {
+  padding: 0.3rem 0.45rem;
+  margin-bottom: 0.2rem;
+  border: 1px solid #443321;
+  background: #0d0a08;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}

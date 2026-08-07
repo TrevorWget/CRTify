@@ -1,5 +1,7 @@
 import { encodeAnimation } from 'wasm-webp';
 import type { CrtSettings, ExportProgress, GifFrame, TextLayer } from '../types/crt';
+import { applyBezelChrome } from './bezelOverlay';
+import { resolveLayersAtTime } from './keyframes';
 import { CrtRenderer } from './webgl';
 import { drawTextLayers } from './textCompositor';
 import { percentToScale } from './imageExport';
@@ -81,15 +83,19 @@ export async function exportAnimatedWebp(
       frameCtx.putImageData(frames[i].imageData, 0, 0);
 
       const time = i * 0.1;
+      const timeline = frames.length <= 1 ? 0 : i / (frames.length - 1);
+      const layers = resolveLayersAtTime(textLayers, timeline);
       const crtCanvas = renderer.renderFrame(frameCanvas, settings, time, {
         preserveAlpha: true,
       });
-      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null);
+      drawTextLayers(crtCanvas, layers, settings, crtAffectText, null, timeline);
+      let output: HTMLCanvasElement = crtCanvas;
+      if (settings.showBezel) output = applyBezelChrome(output);
 
       encodeCtx.clearRect(0, 0, width, height);
       encodeCtx.imageSmoothingEnabled = true;
       encodeCtx.imageSmoothingQuality = 'high';
-      encodeCtx.drawImage(crtCanvas, 0, 0, width, height);
+      encodeCtx.drawImage(output, 0, 0, width, height);
 
       const imageData = encodeCtx.getImageData(0, 0, width, height);
       encodedFrames.push({

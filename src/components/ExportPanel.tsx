@@ -39,6 +39,7 @@ export function ExportPanel({
   const [frameSkip, setFrameSkip] = useState(1);
   const [dither, setDither] = useState(false);
   const [optimizeVideo, setOptimizeVideo] = useState(false);
+  const [keepAudio, setKeepAudio] = useState(true);
 
   const webpSupported = useMemo(() => supportsWebpExport(), []);
   const animatedSource = isFrameSequenceMedia(media);
@@ -48,10 +49,10 @@ export function ExportPanel({
     if (!media) return formats;
     formats.push('png', 'jpeg');
     if (webpSupported) formats.push('webp');
-    if (animatedSource) formats.push('gif');
-    if (media.type === 'video') formats.push('mp4', 'webm');
+    formats.push('gif');
+    formats.push('mp4', 'webm');
     return formats;
-  }, [media, webpSupported, animatedSource]);
+  }, [media, webpSupported]);
 
   useEffect(() => {
     setFilename(defaultName);
@@ -71,6 +72,7 @@ export function ExportPanel({
   const showImageQuality = format === 'jpeg' || format === 'webp';
   const showGifControls = format === 'gif';
   const showVideoOptimize = format === 'mp4' || format === 'webm';
+  const showKeepAudio = showVideoOptimize && media?.type === 'video';
 
   const formatLabel = (item: ExportFormat) => {
     if (item === 'webp' && animatedSource) return 'WEBP (anim)';
@@ -94,6 +96,7 @@ export function ExportPanel({
     setFrameSkip(defaults.frameSkip);
     setDither(defaults.dither);
     setOptimizeVideo(defaults.optimizeVideo);
+    setKeepAudio(defaults.keepAudio);
   };
 
   return (
@@ -251,6 +254,20 @@ export function ExportPanel({
             </label>
           )}
 
+          {showKeepAudio && (
+            <label className="export-field export-toggle">
+              <span>
+                Keep audio track
+                <small>Include source audio when exporting video</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={keepAudio}
+                onChange={(event) => setKeepAudio(event.target.checked)}
+              />
+            </label>
+          )}
+
           <div className="export-presets">
             <button type="button" className="btn btn-small" onClick={applyDefaultPreset}>
               Quality defaults
@@ -272,6 +289,7 @@ export function ExportPanel({
                 frameSkip,
                 dither,
                 optimizeVideo,
+                keepAudio,
               });
               setOpen(false);
             }}

@@ -1,15 +1,26 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import type { LoadedMedia } from '../types/crt';
 import { isFrameSequenceMedia } from '../utils/animationMedia';
 
 interface MediaUploaderProps {
   onFileSelect: (file: File) => void;
+  onWebcamCapture: () => void;
+  onBatchFiles: (files: File[]) => void;
   loading: boolean;
   media: LoadedMedia | null;
   onClear: () => void;
 }
 
-export function MediaUploader({ onFileSelect, loading, media, onClear }: MediaUploaderProps) {
+export function MediaUploader({
+  onFileSelect,
+  onWebcamCapture,
+  onBatchFiles,
+  loading,
+  media,
+  onClear,
+}: MediaUploaderProps) {
+  const batchInputRef = useRef<HTMLInputElement>(null);
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -26,6 +37,15 @@ export function MediaUploader({ onFileSelect, loading, media, onClear }: MediaUp
       e.target.value = '';
     },
     [onFileSelect],
+  );
+
+  const handleBatchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files ? Array.from(e.target.files) : [];
+      if (files.length > 0) onBatchFiles(files);
+      e.target.value = '';
+    },
+    [onBatchFiles],
   );
 
   return (
@@ -47,22 +67,51 @@ export function MediaUploader({ onFileSelect, loading, media, onClear }: MediaUp
           </button>
         </div>
       ) : (
-        <label
-          className="drop-zone"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={handleDrop}
-        >
-          <input
-            type="file"
-            accept="image/*,video/*,.gif,.webp"
-            onChange={handleChange}
-            disabled={loading}
-            hidden
-          />
-          <span className="drop-icon">⬆</span>
-          <span>{loading ? 'Loading...' : 'Drop file or click to upload'}</span>
-          <span className="drop-hint">Images, animated WebP, GIFs, or videos</span>
-        </label>
+        <>
+          <label
+            className="drop-zone"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
+          >
+            <input
+              type="file"
+              accept="image/*,video/*,.gif,.webp"
+              onChange={handleChange}
+              disabled={loading}
+              hidden
+            />
+            <span className="drop-icon">⬆</span>
+            <span>{loading ? 'Loading...' : 'Drop file or click to upload'}</span>
+            <span className="drop-hint">Images, animated WebP, GIFs, or videos</span>
+          </label>
+          <div className="media-uploader-actions">
+            <button
+              type="button"
+              className="btn btn-small"
+              onClick={onWebcamCapture}
+              disabled={loading}
+            >
+              Webcam
+            </button>
+            <button
+              type="button"
+              className="btn btn-small"
+              onClick={() => batchInputRef.current?.click()}
+              disabled={loading}
+            >
+              Batch stills
+            </button>
+            <input
+              ref={batchInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={handleBatchChange}
+            />
+          </div>
+          <p className="drop-hint media-paste-hint">Tip: Ctrl/Cmd+V to paste an image from clipboard</p>
+        </>
       )}
     </div>
   );

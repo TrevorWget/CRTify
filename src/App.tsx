@@ -1,6 +1,9 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  createShapeLayer,
+  createTextLayer,
   defaultCrtSettings,
+  type CrtPreset,
   type CrtSettings,
   type ExportFormat,
   type ExportOptionsConfig,
@@ -11,36 +14,19 @@ import { PreviewCanvas } from './components/PreviewCanvas';
 import { EffectControls } from './components/EffectControls';
 import { TextOverlayEditor } from './components/TextOverlayEditor';
 import { ExportPanel } from './components/ExportPanel';
+import { ProjectDock } from './components/ProjectDock';
 import { useMediaLoader } from './hooks/useMediaLoader';
 import { useExporter } from './hooks/useExporter';
 import { defaultExportFilename } from './utils/imageExport';
+import { loadImageElement } from './utils/textCompositor';
+import {
+  applyShareHash,
+  buildProject,
+  copyShareLink,
+  downloadProject,
+  loadProjectFile,
+} from './utils/projectIO';
 import './styles/global.css';
-
-function createTextLayer(): TextLayer {
-  return {
-    id: crypto.randomUUID(),
-    text: 'CRT TEXT',
-    x: 0.1,
-    y: 0.1,
-    fontSize: 32,
-    color: '#fff4d6',
-    fontFamily: 'VT323',
-    textAlign: 'left',
-    glow: 10,
-    blur: 0,
-    brightness: 1,
-    strokeWidth: 0,
-    strokeColor: '#e63415',
-    letterSpacing: 0,
-    warp: defaultCrtSettings.curvature,
-    rotation: 0,
-    scaleX: 1,
-    scaleY: 1,
-    skew: 0,
-    opacity: 1,
-    locked: false,
-  };
-}
 
 interface EditorSnapshot {
   settings: CrtSettings;
@@ -54,7 +40,9 @@ export default function App() {
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [crtAffectText, setCrtAffectText] = useState(false);
   const historyRef = useRef<EditorSnapshot[]>([]);
+  const redoRef = useRef<EditorSnapshot[]>([]);
   const [historyCount, setHistoryCount] = useState(0);
+  const [redoCount, setRedoCount] = useState(0);
 
   const {
     media,
@@ -65,12 +53,45 @@ export default function App() {
     isPlaying,
     setIsPlaying,
     loadFile,
+    loadBatchFiles,
+    captureWebcam,
     clearMedia,
     clearError: clearLoadError,
   } = useMediaLoader();
 
   const { exportMedia, exporting, progress, error: exportError, clearError: clearExportError } =
     useExporter();
+
+  useEffect(() => {
+    const shared = applyShareHash();
+    if (!shared) return;
+    setSettings(shared.settings);
+    if (shared.crtAffectText !== undefined) setCrtAffectText(shared.crtAffectText);
+    if (shared.textLayers) setTextLayers(shared.textLayers);
+  }, []);
+
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      const items = event.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            event.preventDefault();
+            void loadFile(file);
+          }
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [loadFile]);
 
   const pushHistory = useCallback(() => {
     historyRef.current = [
@@ -81,20 +102,51 @@ export default function App() {
         crtAffectText,
       },
     ];
+    redoRef.current = [];
     setHistoryCount(historyRef.current.length);
+    setRedoCount(0);
   }, [settings, textLayers, crtAffectText]);
 
-  const handleUndo = useCallback(() => {
-    const snapshot = historyRef.current.pop();
-    if (!snapshot) return;
+  const applySnapshot = useCallback((snapshot: EditorSnapshot) => {
     setSettings(snapshot.settings);
     setTextLayers(snapshot.textLayers);
     setCrtAffectText(snapshot.crtAffectText);
     setSelectedLayerId((current) =>
       current && snapshot.textLayers.some((layer) => layer.id === current) ? current : null,
     );
-    setHistoryCount(historyRef.current.length);
   }, []);
+
+  const handleUndo = useCallback(() => {
+    const snapshot = historyRef.current.pop();
+    if (!snapshot) return;
+    redoRef.current = [
+      ...redoRef.current,
+      {
+        settings: { ...settings },
+        textLayers: textLayers.map((layer) => ({ ...layer })),
+        crtAffectText,
+      },
+    ];
+    applySnapshot(snapshot);
+    setHistoryCount(historyRef.current.length);
+    setRedoCount(redoRef.current.length);
+  }, [settings, textLayers, crtAffectText, applySnapshot]);
+
+  const handleRedo = useCallback(() => {
+    const snapshot = redoRef.current.pop();
+    if (!snapshot) return;
+    historyRef.current = [
+      ...historyRef.current,
+      {
+        settings: { ...settings },
+        textLayers: textLayers.map((layer) => ({ ...layer })),
+        crtAffectText,
+      },
+    ];
+    applySnapshot(snapshot);
+    setHistoryCount(historyRef.current.length);
+    setRedoCount(redoRef.current.length);
+  }, [settings, textLayers, crtAffectText, applySnapshot]);
 
   const handleResetAll = useCallback(() => {
     pushHistory();
@@ -120,12 +172,55 @@ export default function App() {
     [pushHistory],
   );
 
+  const handleApplyPreset = useCallback(
+    (preset: CrtPreset) => {
+      pushHistory();
+      setSettings({ ...preset.settings });
+      if (preset.crtAffectText !== undefined) setCrtAffectText(preset.crtAffectText);
+    },
+    [pushHistory],
+  );
+
   const handleAddLayer = useCallback(() => {
     pushHistory();
     const layer = createTextLayer();
     setTextLayers((prev) => [...prev, layer]);
     setSelectedLayerId(layer.id);
   }, [pushHistory]);
+
+  const handleAddShape = useCallback(() => {
+    pushHistory();
+    const layer = createShapeLayer();
+    setTextLayers((prev) => [...prev, layer]);
+    setSelectedLayerId(layer.id);
+  }, [pushHistory]);
+
+  const handleAddSticker = useCallback(
+    async (file: File) => {
+      pushHistory();
+      const url = URL.createObjectURL(file);
+      try {
+        const imageElement = await loadImageElement(url);
+        const layer = createTextLayer({
+          kind: 'image',
+          text: file.name.replace(/\.[^.]+$/, ''),
+          imageUrl: url,
+          imageElement,
+          x: 0.5,
+          y: 0.5,
+          scaleX: 0.25,
+          scaleY: 0.25,
+          glow: 0,
+          warp: 0,
+        });
+        setTextLayers((prev) => [...prev, layer]);
+        setSelectedLayerId(layer.id);
+      } catch {
+        URL.revokeObjectURL(url);
+      }
+    },
+    [pushHistory],
+  );
 
   const handleUpdateLayer = useCallback(
     (id: string, partial: Partial<TextLayer>) => {
@@ -162,17 +257,60 @@ export default function App() {
       const current = textLayers.find((layer) => layer.id === id);
       if (!current) return;
       pushHistory();
-      const defaults = createTextLayer();
+      const defaults =
+        current.kind === 'shape'
+          ? createShapeLayer(current.shape)
+          : current.kind === 'image'
+            ? createTextLayer({ kind: 'image', text: current.text, imageUrl: current.imageUrl })
+            : createTextLayer();
       setTextLayers((prev) =>
         prev.map((layer) =>
           layer.id === id
-            ? { ...defaults, id, text: current.text, x: current.x, y: current.y }
+            ? {
+                ...defaults,
+                id,
+                text: current.text,
+                x: current.x,
+                y: current.y,
+                imageUrl: current.imageUrl,
+                imageElement: current.imageElement,
+                shape: current.shape,
+                kind: current.kind,
+              }
             : layer,
         ),
       );
     },
     [textLayers, pushHistory],
   );
+
+  const handleSaveProject = useCallback(() => {
+    const project = buildProject(settings, textLayers, crtAffectText, media);
+    downloadProject(project, `${project.name ?? 'crtify-project'}.crtify.json`);
+  }, [settings, textLayers, crtAffectText, media]);
+
+  const handleLoadProject = useCallback(async (file: File) => {
+    try {
+      const project = await loadProjectFile(file);
+      pushHistory();
+      setSettings(project.settings);
+      setCrtAffectText(project.crtAffectText);
+      setTextLayers(project.textLayers);
+      setSelectedLayerId(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load project';
+      clearLoadError();
+      console.error(message);
+    }
+  }, [pushHistory, clearLoadError]);
+
+  const handleCopyShareLink = useCallback(async () => {
+    await copyShareLink({
+      settings,
+      crtAffectText,
+      textLayers: textLayers.map(({ imageElement: _ignored, ...rest }) => rest),
+    });
+  }, [settings, crtAffectText, textLayers]);
 
   const handleExport = useCallback(
     (format: ExportFormat, exportConfig: ExportOptionsConfig) => {
@@ -218,6 +356,15 @@ export default function App() {
           >
             ↶ Undo
           </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleRedo}
+            disabled={redoCount === 0}
+            title="Redo last undone change"
+          >
+            ↷ Redo
+          </button>
           <button type="button" className="btn btn-secondary" onClick={handleResetAll}>
             Reset all
           </button>
@@ -239,6 +386,8 @@ export default function App() {
             <span className="module-label">01 / INPUT BAY</span>
             <MediaUploader
               onFileSelect={loadFile}
+              onWebcamCapture={captureWebcam}
+              onBatchFiles={loadBatchFiles}
               loading={loading}
               media={media}
               onClear={clearMedia}
@@ -252,6 +401,8 @@ export default function App() {
               onSelectLayer={setSelectedLayerId}
               onUpdateLayer={handleUpdateLayer}
               onAddLayer={handleAddLayer}
+              onAddShape={handleAddShape}
+              onAddSticker={handleAddSticker}
               onDeleteLayer={handleDeleteLayer}
               onMoveLayer={handleMoveLayer}
               onResetLayer={handleResetLayer}
@@ -295,6 +446,12 @@ export default function App() {
               onReset={() => handleSettingsChange({ ...defaultCrtSettings })}
               crtAffectText={crtAffectText}
               onCrtAffectTextChange={handleCrtAffectTextChange}
+              onApplyPreset={handleApplyPreset}
+            />
+            <ProjectDock
+              onSaveProject={handleSaveProject}
+              onLoadProject={handleLoadProject}
+              onCopyShareLink={handleCopyShareLink}
             />
           </div>
         </aside>

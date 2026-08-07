@@ -162,6 +162,10 @@ export class CrtRenderer {
       ['u_flicker', settings.flicker ? 1.0 : 0.0],
       ['u_flickerIntensity', settings.flickerIntensity],
       ['u_preserveAlpha', preserveAlpha ? 1.0 : 0.0],
+      ['u_rgbMask', settings.rgbMask],
+      ['u_interlace', settings.interlace],
+      ['u_rollBar', settings.rollBar],
+      ['u_phosphorDecay', settings.phosphorDecay],
     ];
 
     gl.uniform1i(gl.getUniformLocation(program, 'u_image'), 0);

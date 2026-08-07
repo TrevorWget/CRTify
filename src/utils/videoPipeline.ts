@@ -1,30 +1,18 @@
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { toBlobURL } from '@ffmpeg/util';
 import type { CrtSettings, ExportProgress, TextLayer } from '../types/crt';
-import { CrtRenderer } from './webgl';
-import { drawTextLayers } from './textCompositor';
+import { applyBezelChrome } from './bezelOverlay';
+import { getFFmpeg } from './ffmpegShared';
 import { getVideoBitrate, getVideoCrf, percentToScale } from './imageExport';
+import { resolveLayersAtTime } from './keyframes';
 import { MAX_VIDEO_EXPORT_FRAMES } from './mediaLoader';
-
-let ffmpegInstance: FFmpeg | null = null;
+import { drawTextLayers } from './textCompositor';
+import { CrtRenderer } from './webgl';
 
 export interface VideoExportSettings {
   scalePercent: number;
   frameSkip: number;
   optimizeVideo: boolean;
-}
-
-async function getFFmpeg(): Promise<FFmpeg> {
-  if (ffmpegInstance) return ffmpegInstance;
-
-  const ffmpeg = new FFmpeg();
-  const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-  });
-  ffmpegInstance = ffmpeg;
-  return ffmpeg;
+  keepAudio?: boolean;
+  sourceFile?: File;
 }
 
 export async function exportVideo(
@@ -56,6 +44,7 @@ export async function exportVideo(
   const ext = format === 'mp4' ? 'mp4' : 'webm';
   const mimeType = format === 'mp4' ? 'video/mp4' : 'video/webm';
   const crf = getVideoCrf(exportSettings.optimizeVideo);
+  const keepAudio = Boolean(exportSettings.keepAudio && exportSettings.sourceFile);
 
   video.currentTime = 0;
   await video.play();
@@ -72,10 +61,15 @@ export async function exportVideo(
       });
 
       await seekVideo(video, time);
+      const timeline = duration > 0 ? time / duration : 0;
+      const layers = resolveLayersAtTime(textLayers, timeline);
       const crtCanvas = renderer.renderFrame(video, settings, time);
-      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null);
-      scaledCtx.clearRect(0, 0, width, height);
-      scaledCtx.drawImage(crtCanvas, 0, 0, width, height);
+      drawTextLayers(crtCanvas, layers, settings, crtAffectText, null, timeline);
+      let output: HTMLCanvasElement = crtCanvas;
+      if (settings.showBezel) output = applyBezelChrome(output);
+      scaledCtx.fillStyle = '#000';
+      scaledCtx.fillRect(0, 0, width, height);
+      scaledCtx.drawImage(output, 0, 0, width, height);
 
       const blob = await canvasToBlob(scaledCanvas, 'image/jpeg');
       const data = new Uint8Array(await blob.arrayBuffer());
@@ -84,7 +78,42 @@ export async function exportVideo(
 
     onProgress({ stage: 'Encoding video', progress: 0.75 });
 
-    if (format === 'mp4') {
+    if (keepAudio && exportSettings.sourceFile) {
+      const sourceBytes = new Uint8Array(await exportSettings.sourceFile.arrayBuffer());
+      const sourceName = `source${exportSettings.sourceFile.name.endsWith('.webm') ? '.webm' : '.mp4'}`;
+      await ffmpeg.writeFile(sourceName, sourceBytes);
+      if (format === 'mp4') {
+        await ffmpeg.exec([
+          '-framerate', String(fps),
+          '-i', 'frame%05d.jpg',
+          '-i', sourceName,
+          '-map', '0:v:0',
+          '-map', '1:a:0?',
+          '-c:v', 'libx264',
+          '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac',
+          '-shortest',
+          '-crf', String(crf),
+          '-preset', exportSettings.optimizeVideo ? 'veryfast' : 'medium',
+          '-y', 'output.mp4',
+        ]);
+      } else {
+        await ffmpeg.exec([
+          '-framerate', String(fps),
+          '-i', 'frame%05d.jpg',
+          '-i', sourceName,
+          '-map', '0:v:0',
+          '-map', '1:a:0?',
+          '-c:v', 'libvpx-vp9',
+          '-b:v', '0',
+          '-c:a', 'libopus',
+          '-shortest',
+          '-crf', String(crf),
+          '-y', 'output.webm',
+        ]);
+      }
+      await ffmpeg.deleteFile(sourceName);
+    } else if (format === 'mp4') {
       await ffmpeg.exec([
         '-framerate', String(fps),
         '-i', 'frame%05d.jpg',
@@ -210,11 +239,16 @@ export async function exportVideoViaMediaRecorder(
         return;
       }
 
+      const timeline = video.duration > 0 ? elapsed / video.duration : 0;
+      const layers = resolveLayersAtTime(textLayers, timeline);
       const crtCanvas = renderer.renderFrame(video, settings, elapsed);
-      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null);
+      drawTextLayers(crtCanvas, layers, settings, crtAffectText, null, timeline);
+      let output: HTMLCanvasElement = crtCanvas;
+      if (settings.showBezel) output = applyBezelChrome(output);
       const ctx = outputCanvas.getContext('2d')!;
-      ctx.clearRect(0, 0, width, height);
-      ctx.drawImage(crtCanvas, 0, 0, width, height);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(output, 0, 0, width, height);
       requestAnimationFrame(renderLoop);
     };
 
