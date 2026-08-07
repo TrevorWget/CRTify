@@ -117,7 +117,16 @@ export type LayerEffectKind =
   | 'wave'
   | 'ripple'
   | 'bulge'
-  | 'shimmer';
+  | 'shimmer'
+  | 'trackingTear'
+  | 'datamosh'
+  | 'scanWipe'
+  | 'colorCycle'
+  | 'typewriter'
+  | 'scramble'
+  | 'impact'
+  | 'tilt'
+  | 'mirrorFlash';
 
 export interface LayerEffect {
   id: string;
@@ -129,6 +138,14 @@ export interface LayerEffect {
   speed: number;
   /** 0–1 phase offset so stacked effects don't lock in sync. */
   phase: number;
+  /** Normalized timeline where the effect becomes active (default 0). */
+  envelopeStart: number;
+  /** Normalized timeline where the effect ends (default 1). */
+  envelopeEnd: number;
+  /** Fade-in as a fraction of the active window (0–0.5). */
+  fadeIn: number;
+  /** Fade-out as a fraction of the active window (0–0.5). */
+  fadeOut: number;
 }
 
 export const LAYER_EFFECT_OPTIONS: ReadonlyArray<{
@@ -150,7 +167,23 @@ export const LAYER_EFFECT_OPTIONS: ReadonlyArray<{
   { id: 'ripple', label: 'Ripple', description: 'Concentric animated ripples' },
   { id: 'bulge', label: 'Bulge', description: 'Breathing lens distortion' },
   { id: 'shimmer', label: 'Shimmer', description: 'Fine heat-haze distortion' },
+  { id: 'trackingTear', label: 'Tracking', description: 'VHS tracking tear bands' },
+  { id: 'datamosh', label: 'Datamosh', description: 'Smear held pixels from prior frames' },
+  { id: 'scanWipe', label: 'Scan Wipe', description: 'Sweeping reveal across the layer' },
+  { id: 'colorCycle', label: 'Color Cycle', description: 'Hue-shifting neon color wash' },
+  { id: 'typewriter', label: 'Typewriter', description: 'Reveal text characters over time' },
+  { id: 'scramble', label: 'Scramble', description: 'Decode scrambled characters into text' },
+  { id: 'impact', label: 'Impact', description: 'Sharp one-shot scale punch' },
+  { id: 'tilt', label: 'Tilt', description: 'Perspective-style skew rock' },
+  { id: 'mirrorFlash', label: 'Mirror', description: 'Flashing horizontal mirror flips' },
 ];
+
+export interface LayerEffectPreset {
+  id: string;
+  name: string;
+  effects: LayerEffect[];
+  builtin?: boolean;
+}
 
 export interface TextLayer {
   id: string;
@@ -233,6 +266,24 @@ export const defaultExportOptions = (): Omit<ExportOptionsConfig, 'filename'> =>
   keepAudio: true,
 });
 
+export interface ExportRecipe {
+  id: string;
+  name: string;
+  description?: string;
+  format: ExportFormat;
+  options: Omit<ExportOptionsConfig, 'filename'> & { filename?: string };
+  builtin?: boolean;
+}
+
+export interface ExportQueueItem {
+  id: string;
+  label: string;
+  format: ExportFormat;
+  options: ExportOptionsConfig;
+  status: 'queued' | 'running' | 'done' | 'error';
+  error?: string;
+}
+
 export interface ExportProgress {
   stage: string;
   progress: number;
@@ -313,6 +364,8 @@ export function normalizeCrtSettings(input: Partial<CrtSettings> | null | undefi
 }
 
 export function normalizeLayerEffect(input: Partial<LayerEffect> & { kind: LayerEffectKind }): LayerEffect {
+  const start = Math.min(1, Math.max(0, input.envelopeStart ?? 0));
+  const end = Math.min(1, Math.max(start, input.envelopeEnd ?? 1));
   return {
     id: input.id ?? crypto.randomUUID(),
     kind: input.kind,
@@ -320,6 +373,10 @@ export function normalizeLayerEffect(input: Partial<LayerEffect> & { kind: Layer
     intensity: Math.min(1, Math.max(0, input.intensity ?? 0.5)),
     speed: Math.min(8, Math.max(0.05, input.speed ?? 1)),
     phase: Math.min(1, Math.max(0, input.phase ?? 0)),
+    envelopeStart: start,
+    envelopeEnd: end,
+    fadeIn: Math.min(0.5, Math.max(0, input.fadeIn ?? 0)),
+    fadeOut: Math.min(0.5, Math.max(0, input.fadeOut ?? 0)),
   };
 }
 
@@ -339,8 +396,31 @@ export function createLayerEffect(kind: LayerEffectKind, partial: Partial<LayerE
     ripple: { intensity: 0.35, speed: 1, phase: 0 },
     bulge: { intensity: 0.35, speed: 0.75, phase: 0 },
     shimmer: { intensity: 0.3, speed: 1.5, phase: 0 },
+    trackingTear: { intensity: 0.5, speed: 1.2, phase: 0 },
+    datamosh: { intensity: 0.45, speed: 1, phase: 0 },
+    scanWipe: { intensity: 0.7, speed: 0.8, phase: 0 },
+    colorCycle: { intensity: 0.55, speed: 0.6, phase: 0 },
+    typewriter: { intensity: 1, speed: 0.7, phase: 0 },
+    scramble: { intensity: 0.85, speed: 0.9, phase: 0 },
+    impact: { intensity: 0.55, speed: 1.4, phase: 0 },
+    tilt: { intensity: 0.4, speed: 0.9, phase: 0 },
+    mirrorFlash: { intensity: 1, speed: 1.6, phase: 0 },
   };
   return normalizeLayerEffect({ kind, ...defaults[kind], ...partial });
+}
+
+export function duplicateTextLayer(layer: TextLayer): TextLayer {
+  return {
+    ...layer,
+    id: crypto.randomUUID(),
+    keyframes: layer.keyframes.map((frame) => ({
+      ...frame,
+      id: crypto.randomUUID(),
+    })),
+    effects: layer.effects.map((effect) =>
+      normalizeLayerEffect({ ...effect, id: crypto.randomUUID() }),
+    ),
+  };
 }
 
 export function normalizeTextLayer(input: Partial<TextLayer> & { id?: string }): TextLayer {
