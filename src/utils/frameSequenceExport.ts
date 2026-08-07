@@ -1,6 +1,7 @@
 import type { CrtSettings, ExportProgress, GifFrame, TextLayer } from '../types/crt';
 import { applyBezelChrome } from './bezelOverlay';
 import { percentToScale } from './imageExport';
+import { normalizeExportRange, selectFrameIndexes } from './exportRange';
 import { imageDataToCanvas } from './mediaLoader';
 import { drawTextLayers } from './textCompositor';
 import { CrtRenderer } from './webgl';
@@ -10,6 +11,8 @@ export interface FrameVideoExportSettings {
   scalePercent: number;
   frameSkip: number;
   optimizeVideo: boolean;
+  rangeStart?: number;
+  rangeEnd?: number;
 }
 
 function canvasToJpegBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
@@ -45,9 +48,13 @@ export async function exportFramesAsVideo(
   const width = Math.max(2, Math.round(sourceWidth * scale) & ~1);
   const height = Math.max(2, Math.round(sourceHeight * scale) & ~1);
   const frameSkip = Math.max(1, Math.round(exportSettings.frameSkip));
-  const selected: number[] = [];
-  for (let i = 0; i < frames.length; i += frameSkip) selected.push(i);
-  if (selected[selected.length - 1] !== frames.length - 1) selected.push(frames.length - 1);
+  const selected = selectFrameIndexes(
+    frames.length,
+    frameSkip,
+    exportSettings.rangeStart,
+    exportSettings.rangeEnd,
+  );
+  if (selected.length === 0) selected.push(0);
 
   let totalDurationMs = 0;
   for (const frame of frames) totalDurationMs += Math.max(10, frame.delay);
@@ -91,7 +98,7 @@ export async function exportFramesAsVideo(
 
       frameCtx.clearRect(0, 0, sourceWidth, sourceHeight);
       frameCtx.putImageData(frames[index].imageData, 0, 0);
-      const timeline = selected.length <= 1 ? 0 : step / (selected.length - 1);
+      const timeline = frames.length <= 1 ? 0 : index / (frames.length - 1);
       const crtCanvas = renderer.renderFrame(frameCanvas, settings, index * 0.1, {
         preserveAlpha: false,
       });
@@ -160,7 +167,14 @@ export async function rasterizeVideoToFrames(
   textLayers: TextLayer[],
   crtAffectText: boolean,
   onProgress: (progress: ExportProgress) => void,
-  options: { scalePercent: number; frameSkip: number; optimizeVideo: boolean; maxFrames?: number },
+  options: {
+    scalePercent: number;
+    frameSkip: number;
+    optimizeVideo: boolean;
+    maxFrames?: number;
+    rangeStart?: number;
+    rangeEnd?: number;
+  },
 ): Promise<GifFrame[]> {
   const renderer = new CrtRenderer();
   const scale = percentToScale(options.scalePercent);
@@ -169,7 +183,12 @@ export async function rasterizeVideoToFrames(
   const baseFps = options.optimizeVideo ? 12 : 15;
   const fps = Math.max(1, baseFps / Math.max(1, options.frameSkip));
   const maxFrames = options.maxFrames ?? 300;
-  const totalFrames = Math.min(Math.ceil(video.duration * fps), maxFrames);
+  const duration = video.duration;
+  const { start, end } = normalizeExportRange(options.rangeStart, options.rangeEnd);
+  const t0 = start * duration;
+  const t1 = Math.max(t0, end * duration);
+  const span = Math.max(0.001, t1 - t0);
+  const totalFrames = Math.min(Math.ceil(span * fps), maxFrames);
   const delay = Math.round(1000 / fps);
   const scaled = document.createElement('canvas');
   scaled.width = width;
@@ -179,14 +198,14 @@ export async function rasterizeVideoToFrames(
 
   try {
     for (let i = 0; i < totalFrames; i++) {
-      const time = i / fps;
-      if (time > video.duration) break;
+      const time = t0 + i / fps;
+      if (time > t1 + 1e-4) break;
       onProgress({
         stage: `Sampling video frame ${i + 1}/${totalFrames}`,
         progress: (i / totalFrames) * 0.55,
       });
-      await seekVideo(video, time);
-      const timeline = video.duration > 0 ? time / video.duration : 0;
+      await seekVideo(video, Math.min(time, duration));
+      const timeline = duration > 0 ? Math.min(time, duration) / duration : 0;
       const crtCanvas = renderer.renderFrame(video, settings, time, { preserveAlpha: true });
       drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
       let output: HTMLCanvasElement = crtCanvas;

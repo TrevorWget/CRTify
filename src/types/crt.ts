@@ -126,7 +126,11 @@ export type LayerEffectKind =
   | 'scramble'
   | 'impact'
   | 'tilt'
-  | 'mirrorFlash';
+  | 'mirrorFlash'
+  | 'filmGrain'
+  | 'chromaticPulse'
+  | 'holdTear'
+  | 'afterimage';
 
 export interface LayerEffect {
   id: string;
@@ -176,6 +180,10 @@ export const LAYER_EFFECT_OPTIONS: ReadonlyArray<{
   { id: 'impact', label: 'Impact', description: 'Sharp one-shot scale punch' },
   { id: 'tilt', label: 'Tilt', description: 'Perspective-style skew rock' },
   { id: 'mirrorFlash', label: 'Mirror', description: 'Flashing horizontal mirror flips' },
+  { id: 'filmGrain', label: 'Film Grain', description: 'Fine photographic grain wash' },
+  { id: 'chromaticPulse', label: 'Chroma Pulse', description: 'Breathing red/cyan channel split' },
+  { id: 'holdTear', label: 'Hold Tear', description: 'Vertical hold tear drifting down the frame' },
+  { id: 'afterimage', label: 'Afterimage', description: 'Soft phosphor-style trailing fade' },
 ];
 
 export interface LayerEffectPreset {
@@ -209,6 +217,11 @@ export interface TextLayer {
   skew: number;
   opacity: number;
   locked: boolean;
+  /**
+   * Per-layer CRT override. `null`/unset inherits the global CRT-affect-overlays
+   * toggle; `true`/`false` force the full CRT stack on or off for this layer.
+   */
+  crtAffect?: boolean | null;
   shape?: ShapeKind;
   /** Object URL or data URL for sticker/image layers. */
   imageUrl?: string;
@@ -254,6 +267,10 @@ export interface ExportOptionsConfig {
   optimizeVideo: boolean;
   /** Keep source audio track when exporting MP4/WebM from video. */
   keepAudio: boolean;
+  /** Normalized in-point (0–1) for animated exports. */
+  rangeStart: number;
+  /** Normalized out-point (0–1) for animated exports. */
+  rangeEnd: number;
 }
 
 export const defaultExportOptions = (): Omit<ExportOptionsConfig, 'filename'> => ({
@@ -264,6 +281,8 @@ export const defaultExportOptions = (): Omit<ExportOptionsConfig, 'filename'> =>
   dither: false,
   optimizeVideo: false,
   keepAudio: true,
+  rangeStart: 0,
+  rangeEnd: 1,
 });
 
 export interface ExportRecipe {
@@ -339,6 +358,7 @@ export function createTextLayer(partial: Partial<TextLayer> = {}): TextLayer {
     skew: 0,
     opacity: 1,
     locked: false,
+    crtAffect: null,
     keyframes: [],
     effects: [],
     ...partial,
@@ -405,6 +425,10 @@ export function createLayerEffect(kind: LayerEffectKind, partial: Partial<LayerE
     impact: { intensity: 0.55, speed: 1.4, phase: 0 },
     tilt: { intensity: 0.4, speed: 0.9, phase: 0 },
     mirrorFlash: { intensity: 1, speed: 1.6, phase: 0 },
+    filmGrain: { intensity: 0.4, speed: 1.5, phase: 0 },
+    chromaticPulse: { intensity: 0.45, speed: 1.1, phase: 0 },
+    holdTear: { intensity: 0.55, speed: 0.7, phase: 0 },
+    afterimage: { intensity: 0.45, speed: 1, phase: 0 },
   };
   return normalizeLayerEffect({ kind, ...defaults[kind], ...partial });
 }

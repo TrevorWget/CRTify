@@ -4,6 +4,7 @@ import { applyBezelChrome } from './bezelOverlay';
 import { CrtRenderer } from './webgl';
 import { drawTextLayers } from './textCompositor';
 import { percentToScale } from './imageExport';
+import { selectFrameIndexes } from './exportRange';
 
 const frameCanvas = document.createElement('canvas');
 const frameCtx = frameCanvas.getContext('2d')!;
@@ -15,6 +16,8 @@ export interface WebpAnimExportSettings {
   /** 0.5–1 mapped to libwebp quality 50–100. */
   imageQuality: number;
   frameSkip: number;
+  rangeStart?: number;
+  rangeEnd?: number;
 }
 
 function sourceHasTransparency(frames: GifFrame[]): boolean {
@@ -53,13 +56,13 @@ export async function exportAnimatedWebp(
   encodeCanvas.height = height;
 
   const usesTransparency = settings.curvature > 0 || sourceHasTransparency(frames);
-  const selectedIndexes: number[] = [];
-  for (let i = 0; i < frames.length; i += frameSkip) {
-    selectedIndexes.push(i);
-  }
-  if (selectedIndexes[selectedIndexes.length - 1] !== frames.length - 1) {
-    selectedIndexes.push(frames.length - 1);
-  }
+  const selectedIndexes = selectFrameIndexes(
+    frames.length,
+    frameSkip,
+    exportSettings.rangeStart,
+    exportSettings.rangeEnd,
+  );
+  if (selectedIndexes.length === 0) selectedIndexes.push(0);
 
   try {
     const encodedFrames: { data: Uint8Array; duration: number; config: { lossless: number; quality: number } }[] =

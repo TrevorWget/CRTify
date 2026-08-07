@@ -24,6 +24,7 @@ interface ExportPanelProps {
   error: string | null;
   defaultName: string;
   queue: ExportQueueItem[];
+  timeline?: number;
   onExport: (format: ExportFormat, config: ExportOptionsConfig) => void;
   onEnqueue: (format: ExportFormat, config: ExportOptionsConfig) => void;
   onClearFinished: () => void;
@@ -39,6 +40,7 @@ export function ExportPanel({
   error,
   defaultName,
   queue,
+  timeline = 0,
   onExport,
   onEnqueue,
   onClearFinished,
@@ -54,6 +56,8 @@ export function ExportPanel({
   const [dither, setDither] = useState(false);
   const [optimizeVideo, setOptimizeVideo] = useState(false);
   const [keepAudio, setKeepAudio] = useState(true);
+  const [rangeStart, setRangeStart] = useState(0);
+  const [rangeEnd, setRangeEnd] = useState(1);
   const [recipes, setRecipes] = useState<ExportRecipe[]>(() => listExportRecipes());
   const [recipeName, setRecipeName] = useState('');
 
@@ -104,6 +108,12 @@ export function ExportPanel({
   const showGifControls = format === 'gif';
   const showVideoOptimize = format === 'mp4' || format === 'webm';
   const showKeepAudio = showVideoOptimize && media?.type === 'video';
+  const showRange =
+    format === 'gif' ||
+    format === 'mp4' ||
+    format === 'webm' ||
+    animatedWebpExport ||
+    (format === 'webp' && media?.type === 'video');
 
   const formatLabel = (item: ExportFormat) => {
     if (item === 'webp' && animatedSource) return 'WEBP (anim)';
@@ -117,6 +127,8 @@ export function ExportPanel({
     setFrameSkip(2);
     setDither(false);
     setOptimizeVideo(true);
+    setRangeStart(0);
+    setRangeEnd(1);
   };
 
   const applyDefaultPreset = () => {
@@ -128,6 +140,8 @@ export function ExportPanel({
     setDither(defaults.dither);
     setOptimizeVideo(defaults.optimizeVideo);
     setKeepAudio(defaults.keepAudio);
+    setRangeStart(defaults.rangeStart);
+    setRangeEnd(defaults.rangeEnd);
   };
 
   const currentOptions = (): ExportOptionsConfig => ({
@@ -139,6 +153,8 @@ export function ExportPanel({
     dither,
     optimizeVideo,
     keepAudio,
+    rangeStart: Math.min(rangeStart, rangeEnd),
+    rangeEnd: Math.max(rangeStart, rangeEnd),
   });
 
   const applyRecipe = (recipe: ExportRecipe) => {
@@ -150,6 +166,8 @@ export function ExportPanel({
     setDither(recipe.options.dither);
     setOptimizeVideo(recipe.options.optimizeVideo);
     setKeepAudio(recipe.options.keepAudio);
+    setRangeStart(recipe.options.rangeStart ?? 0);
+    setRangeEnd(recipe.options.rangeEnd ?? 1);
     if (recipe.options.filename) setFilename(recipe.options.filename);
   };
 
@@ -292,6 +310,83 @@ export function ExportPanel({
                 onChange={(event) => setFrameSkip(Number(event.target.value))}
               />
             </label>
+          )}
+
+          {showRange && (
+            <div className="export-field export-range">
+              <span>
+                In / Out
+                <span className="control-value">
+                  {Math.round(Math.min(rangeStart, rangeEnd) * 100)}–
+                  {Math.round(Math.max(rangeStart, rangeEnd) * 100)}%
+                </span>
+              </span>
+              <small>Export only this portion of the timeline (keyframes stay media-relative).</small>
+              <label className="export-range-slider">
+                <span>In</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.round(rangeStart * 100)}
+                  onChange={(event) => {
+                    const next = Number(event.target.value) / 100;
+                    setRangeStart(next);
+                    if (next > rangeEnd) setRangeEnd(next);
+                  }}
+                />
+              </label>
+              <label className="export-range-slider">
+                <span>Out</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.round(rangeEnd * 100)}
+                  onChange={(event) => {
+                    const next = Number(event.target.value) / 100;
+                    setRangeEnd(next);
+                    if (next < rangeStart) setRangeStart(next);
+                  }}
+                />
+              </label>
+              <div className="export-range-actions">
+                <button
+                  type="button"
+                  className="btn btn-small"
+                  onClick={() => {
+                    const t = Math.min(1, Math.max(0, timeline));
+                    setRangeStart(t);
+                    if (t > rangeEnd) setRangeEnd(t);
+                  }}
+                >
+                  Set In
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-small"
+                  onClick={() => {
+                    const t = Math.min(1, Math.max(0, timeline));
+                    setRangeEnd(t);
+                    if (t < rangeStart) setRangeStart(t);
+                  }}
+                >
+                  Set Out
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-small"
+                  onClick={() => {
+                    setRangeStart(0);
+                    setRangeEnd(1);
+                  }}
+                >
+                  Full
+                </button>
+              </div>
+            </div>
           )}
 
           {showVideoOptimize && (
