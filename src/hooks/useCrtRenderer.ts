@@ -3,7 +3,7 @@ import type { CrtSettings, LoadedMedia, TextLayer } from '../types/crt';
 import { CrtRenderer } from '../utils/webgl';
 import { drawTextLayers } from '../utils/textCompositor';
 import { imageDataToCanvas } from '../utils/mediaLoader';
-import { isFrameSequenceMedia } from '../utils/animationMedia';
+import { getTimelinePosition, isFrameSequenceMedia } from '../utils/animationMedia';
 
 interface UseCrtRendererOptions {
   media: LoadedMedia | null;
@@ -55,13 +55,7 @@ export function useCrtRenderer({
 
     if (!source) return;
 
-    let timeline = 0;
-    if (isFrameSequenceMedia(media) && media.gifFrames) {
-      timeline = gifFrameIndex / Math.max(1, media.gifFrames.length - 1);
-    } else if (media.type === 'video' && media.video) {
-      const duration = media.video.duration;
-      timeline = duration > 0 ? media.video.currentTime / duration : 0;
-    }
+    const timeline = getTimelinePosition(media, gifFrameIndex);
 
     const crtCanvas = renderer.renderFrame(source, settings, time, { preserveAlpha: true });
     const displayCanvas = canvasRef.current;

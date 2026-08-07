@@ -8,9 +8,12 @@ import {
   type OverlayLayerKind,
   type TextLayer,
 } from '../types/crt';
+import { positionUpdate, resolveLayerAtTime, upsertKeyframe } from '../utils/keyframes';
 
 interface TextOverlayEditorProps {
   layers: TextLayer[];
+  /** Normalized playhead position, used so position edits target the active keyframe. */
+  timeline: number;
   selectedLayerId: string | null;
   onSelectLayer: (id: string | null) => void;
   onUpdateLayer: (id: string, partial: Partial<TextLayer>) => void;
@@ -97,6 +100,7 @@ function LayerSlider({
 
 export function TextOverlayEditor({
   layers,
+  timeline,
   selectedLayerId,
   onSelectLayer,
   onUpdateLayer,
@@ -131,11 +135,9 @@ export function TextOverlayEditor({
   );
 
   const addKeyframe = (layer: TextLayer, t: number) => {
-    const frame: LayerKeyframe = { t, x: layer.x, y: layer.y, opacity: layer.opacity };
-    const next = [...layer.keyframes.filter((kf) => Math.abs(kf.t - t) > 0.001), frame].sort(
-      (a, b) => a.t - b.t,
-    );
-    onUpdateLayer(layer.id, { keyframes: next });
+    const pose = resolveLayerAtTime(layer, t);
+    const frame: LayerKeyframe = { t, x: pose.x, y: pose.y, opacity: pose.opacity };
+    onUpdateLayer(layer.id, { keyframes: upsertKeyframe(layer.keyframes, frame) });
   };
 
   const clearKeyframes = (layerId: string) => {
@@ -378,7 +380,7 @@ export function TextOverlayEditor({
                 className="btn btn-small"
                 onClick={() =>
                   onUpdateLayer(selected.id, {
-                    x: 0.5,
+                    ...positionUpdate(selected, { x: 0.5 }, timeline),
                     ...(selected.kind === 'text' ? { textAlign: 'center' as const } : {}),
                   })
                 }
@@ -388,7 +390,9 @@ export function TextOverlayEditor({
               <button
                 type="button"
                 className="btn btn-small"
-                onClick={() => onUpdateLayer(selected.id, { y: 0.5 })}
+                onClick={() =>
+                  onUpdateLayer(selected.id, positionUpdate(selected, { y: 0.5 }, timeline))
+                }
               >
                 Center Y
               </button>
@@ -397,8 +401,7 @@ export function TextOverlayEditor({
                 className="btn btn-small"
                 onClick={() =>
                   onUpdateLayer(selected.id, {
-                    x: 0.5,
-                    y: 0.5,
+                    ...positionUpdate(selected, { x: 0.5, y: 0.5 }, timeline),
                     ...(selected.kind === 'text' ? { textAlign: 'center' as const } : {}),
                   })
                 }
@@ -557,16 +560,21 @@ export function TextOverlayEditor({
             </button>
           </div>
           {selected.keyframes.length > 0 && (
-            <ul className="keyframe-list">
-              {selected.keyframes.map((kf, index) => (
-                <li key={`${kf.t}-${index}`} className="keyframe-item">
-                  <span>
-                    t={Math.round(kf.t * 100)}% · x={kf.x?.toFixed(2)} · y={kf.y?.toFixed(2)} · α=
-                    {kf.opacity?.toFixed(2)}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <small className="keyframe-hint">
+                Dragging on the preview edits the keyframe at the current frame.
+              </small>
+              <ul className="keyframe-list">
+                {selected.keyframes.map((kf, index) => (
+                  <li key={`${kf.t}-${index}`} className="keyframe-item">
+                    <span>
+                      t={Math.round(kf.t * 100)}% · x={kf.x?.toFixed(2)} · y={kf.y?.toFixed(2)} · α=
+                      {kf.opacity?.toFixed(2)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       )}

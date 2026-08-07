@@ -19,6 +19,7 @@ import { useMediaLoader } from './hooks/useMediaLoader';
 import { useExporter } from './hooks/useExporter';
 import { defaultExportFilename } from './utils/imageExport';
 import { loadImageElement } from './utils/textCompositor';
+import { getTimelinePosition } from './utils/animationMedia';
 import {
   applyShareHash,
   buildProject,
@@ -397,6 +398,7 @@ export default function App() {
             <span className="module-label">02 / TYPE DECK</span>
             <TextOverlayEditor
               layers={textLayers}
+              timeline={getTimelinePosition(media, gifFrameIndex)}
               selectedLayerId={selectedLayerId}
               onSelectLayer={setSelectedLayerId}
               onUpdateLayer={handleUpdateLayer}
