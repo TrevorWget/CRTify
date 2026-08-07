@@ -59,6 +59,8 @@ export function PreviewCanvas({
   const [zoom, setZoom] = useState(1);
   const [fitMode, setFitMode] = useState(true);
   const [videoTime, setVideoTime] = useState(0);
+  const [previewMuted, setPreviewMuted] = useState(true);
+  const [previewVolume, setPreviewVolume] = useState(1);
 
   const { canvasRef, render } = useCrtRenderer({
     media,
@@ -136,6 +138,25 @@ export function PreviewCanvas({
       video.removeEventListener('loadedmetadata', sync);
     };
   }, [media, onVideoTimeChange]);
+
+  useEffect(() => {
+    const video = media?.type === 'video' ? media.video : null;
+    if (!video) return;
+    video.muted = previewMuted;
+    video.volume = previewVolume;
+  }, [media, previewMuted, previewVolume]);
+
+  const adjustPreviewVolume = useCallback((delta: number) => {
+    setPreviewVolume((current) => {
+      const next = Math.min(1, Math.max(0, Number((current + delta).toFixed(2))));
+      if (next > 0) setPreviewMuted(false);
+      return next;
+    });
+  }, []);
+
+  const togglePreviewMute = useCallback(() => {
+    setPreviewMuted((current) => !current);
+  }, []);
 
   const scrubTo = useCallback(
     (value: number) => {
@@ -320,6 +341,37 @@ export function PreviewCanvas({
                   title="Scrub timeline"
                 />
                 <span className="scrub-label">{scrubLabel}</span>
+              </div>
+            )}
+            {media.type === 'video' && (
+              <div className="audio-controls" aria-label="Preview audio">
+                <button
+                  type="button"
+                  className={`btn btn-small audio-btn ${previewMuted ? 'active' : ''}`}
+                  onClick={togglePreviewMute}
+                  title={previewMuted ? 'Unmute preview audio' : 'Mute preview audio'}
+                >
+                  {previewMuted ? 'MUTE' : 'AUD'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-small audio-btn"
+                  onClick={() => adjustPreviewVolume(-0.1)}
+                  disabled={previewMuted || previewVolume <= 0}
+                  title="Lower preview volume"
+                >
+                  VOL−
+                </button>
+                <span className="audio-level">{Math.round(previewVolume * 100)}</span>
+                <button
+                  type="button"
+                  className="btn btn-small audio-btn"
+                  onClick={() => adjustPreviewVolume(0.1)}
+                  disabled={previewMuted || previewVolume >= 1}
+                  title="Raise preview volume"
+                >
+                  VOL+
+                </button>
               </div>
             )}
           </div>

@@ -116,6 +116,30 @@ function applyOneEffect(layer: TextLayer, effect: LayerEffect, time: number): Te
   }
 }
 
+/** One-shot 0→1 progress for text reveal effects; holds at 1 after completion. */
+function textEffectProgress(effect: LayerEffect, time: number): number {
+  if (!effect.enabled) return 0;
+
+  const t = clamp01(time);
+  const start = clamp01(effect.envelopeStart ?? 0);
+  const end = Math.max(start, clamp01(effect.envelopeEnd ?? 1));
+
+  if (t < start) return 0;
+  if (t >= end) return 1;
+
+  const gain = effectEnvelopeGain(effect, time);
+  if (gain <= 0) return 0;
+
+  const span = Math.max(1e-6, end - start);
+  const local = (t - start) / span;
+  const phase = clamp01(effect.phase);
+  const delay = phase * 0.95;
+  const windowSpan = Math.max(1e-6, 1 - delay);
+  const driven = clamp01((local - delay) / windowSpan);
+  const speed = Math.max(0.05, effect.speed);
+  return clamp01(driven * speed);
+}
+
 /** Apply enabled transform-tier effects after keyframe sampling. */
 export function applyLayerEffects(layer: TextLayer, time: number): TextLayer {
   if (!layer.effects?.length) return layer;
@@ -135,27 +159,34 @@ export function resolveEffectText(layer: TextLayer, time: number): string {
   const chars = [...layer.text];
   const total = Math.max(1, chars.filter((ch) => ch.trim()).length);
 
-  let reveal = 1;
-  if (typewriter) {
-    const gain = effectiveIntensity(typewriter, time);
-    if (gain <= 0) return '';
-    const clock = effectClock(typewriter, time);
-    reveal = clamp01(gain * (0.15 + clock * 0.85));
-  }
+  const typewriterProgress = typewriter ? textEffectProgress(typewriter, time) : 1;
+  const scrambleProgress = scramble ? textEffectProgress(scramble, time) : 1;
 
-  const revealed = Math.floor(total * reveal);
+  if (typewriter && typewriterProgress <= 0 && scrambleProgress <= 0) return '';
+
+  const revealProgress = typewriter ? typewriterProgress : scrambleProgress;
+  const revealed =
+    revealProgress >= 1 ? total : Math.min(total, Math.ceil(total * revealProgress - 1e-9));
+
   let seen = 0;
-  const scrambleGain = scramble ? effectiveIntensity(scramble, time) : 0;
-  const scrambleStep = scramble ? Math.floor(time * 18 * scramble.speed) : 0;
+  const scrambleIntensity = scramble ? clamp01(scramble.intensity) : 0;
+  const scrambleStep = scramble
+    ? Math.floor(time * 18 * Math.max(0.05, scramble.speed))
+    : 0;
 
   return chars
     .map((ch, index) => {
       if (!ch.trim()) return ch;
       const order = seen++;
       if (order < revealed) return ch;
-      if (scrambleGain <= 0) return typewriter ? '' : ch;
+
+      const settling = scramble && scrambleProgress < 1;
+      if (!settling) return typewriter ? '' : ch;
+
+      const shuffleRate = 1 + scrambleIntensity * 5;
       const pick = Math.floor(
-        hash01(`${layer.id}:scramble:${scrambleStep}:${index}`) * SCRAMBLE_GLYPHS.length,
+        hash01(`${layer.id}:scramble:${Math.floor(scrambleStep * shuffleRate)}:${index}`) *
+          SCRAMBLE_GLYPHS.length,
       );
       return SCRAMBLE_GLYPHS[pick] ?? '#';
     })
