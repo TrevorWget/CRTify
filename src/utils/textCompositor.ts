@@ -192,11 +192,12 @@ export function drawTextLayers(
 
     applyLayerCanvasEffects(layerCanvas, layer, timeline);
 
+    const layerCrtAffect = layer.crtAffect ?? crtAffectText;
     const useDistortion = hasLayerDistortion(layer, timeline);
-    const useWarp = crtAffectText || layer.warp > 0 || useDistortion;
+    const useWarp = layerCrtAffect || layer.warp > 0 || useDistortion;
     if (useWarp) {
       textEffectRenderer ??= new CrtRenderer();
-      const effectSettings = getTextEffectSettings(settings, layer.warp, crtAffectText);
+      const effectSettings = getTextEffectSettings(settings, layer.warp, layerCrtAffect);
       const renderedLayer = textEffectRenderer.renderFrame(layerCanvas, effectSettings, timeline, {
         preserveAlpha: true,
         layerDistortion: getLayerDistortionOptions(layer, timeline),

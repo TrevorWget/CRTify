@@ -2,6 +2,7 @@ import type { CrtSettings, ExportProgress, TextLayer } from '../types/crt';
 import { applyBezelChrome } from './bezelOverlay';
 import { getFFmpeg } from './ffmpegShared';
 import { getVideoBitrate, getVideoCrf, percentToScale } from './imageExport';
+import { normalizeExportRange } from './exportRange';
 import { MAX_VIDEO_EXPORT_FRAMES } from './mediaLoader';
 import { drawTextLayers } from './textCompositor';
 import { CrtRenderer } from './webgl';
@@ -12,6 +13,8 @@ export interface VideoExportSettings {
   optimizeVideo: boolean;
   keepAudio?: boolean;
   sourceFile?: File;
+  rangeStart?: number;
+  rangeEnd?: number;
 }
 
 export async function exportVideo(
@@ -31,7 +34,11 @@ export async function exportVideo(
   const baseFps = exportSettings.optimizeVideo ? 24 : 30;
   const frameSkip = Math.max(1, Math.round(exportSettings.frameSkip));
   const fps = Math.max(1, baseFps / frameSkip);
-  const totalFrames = Math.min(Math.ceil(duration * fps), MAX_VIDEO_EXPORT_FRAMES);
+  const { start, end } = normalizeExportRange(exportSettings.rangeStart, exportSettings.rangeEnd);
+  const t0 = start * duration;
+  const t1 = Math.max(t0, end * duration);
+  const span = Math.max(0.001, t1 - t0);
+  const totalFrames = Math.min(Math.ceil(span * fps), MAX_VIDEO_EXPORT_FRAMES);
   const scaledCanvas = document.createElement('canvas');
   scaledCanvas.width = width;
   scaledCanvas.height = height;
@@ -45,22 +52,22 @@ export async function exportVideo(
   const crf = getVideoCrf(exportSettings.optimizeVideo);
   const keepAudio = Boolean(exportSettings.keepAudio && exportSettings.sourceFile);
 
-  video.currentTime = 0;
+  video.currentTime = t0;
   await video.play();
   video.pause();
 
   try {
     for (let i = 0; i < totalFrames; i++) {
-      const time = i / fps;
-      if (time > duration) break;
+      const time = t0 + i / fps;
+      if (time > t1 + 1e-4) break;
 
       onProgress({
         stage: `Processing frame ${i + 1}/${totalFrames}`,
         progress: (i / totalFrames) * 0.7,
       });
 
-      await seekVideo(video, time);
-      const timeline = duration > 0 ? time / duration : 0;
+      await seekVideo(video, Math.min(time, duration));
+      const timeline = duration > 0 ? Math.min(time, duration) / duration : 0;
       const crtCanvas = renderer.renderFrame(video, settings, time);
       drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
       let output: HTMLCanvasElement = crtCanvas;
@@ -84,6 +91,8 @@ export async function exportVideo(
         await ffmpeg.exec([
           '-framerate', String(fps),
           '-i', 'frame%05d.jpg',
+          '-ss', String(t0),
+          '-t', String(span),
           '-i', sourceName,
           '-map', '0:v:0',
           '-map', '1:a:0?',
@@ -99,6 +108,8 @@ export async function exportVideo(
         await ffmpeg.exec([
           '-framerate', String(fps),
           '-i', 'frame%05d.jpg',
+          '-ss', String(t0),
+          '-t', String(span),
           '-i', sourceName,
           '-map', '0:v:0',
           '-map', '1:a:0?',
@@ -187,6 +198,10 @@ export async function exportVideoViaMediaRecorder(
   const width = Math.max(2, Math.round(video.videoWidth * scale) & ~1);
   const height = Math.max(2, Math.round(video.videoHeight * scale) & ~1);
   const fps = Math.max(1, (exportSettings.optimizeVideo ? 24 : 30) / Math.max(1, exportSettings.frameSkip));
+  const duration = video.duration;
+  const { start, end } = normalizeExportRange(exportSettings.rangeStart, exportSettings.rangeEnd);
+  const t0 = start * duration;
+  const t1 = Math.max(t0, end * duration);
 
   const outputCanvas = document.createElement('canvas');
   outputCanvas.width = width;
@@ -207,7 +222,7 @@ export async function exportVideoViaMediaRecorder(
     if (e.data.size > 0) chunks.push(e.data);
   };
 
-  video.currentTime = 0;
+  video.currentTime = t0;
   await video.play();
 
   return new Promise((resolve, reject) => {
@@ -223,22 +238,24 @@ export async function exportVideoViaMediaRecorder(
 
     recorder.start();
     let startTime: number | null = null;
+    const clipDuration = Math.max(0.001, t1 - t0);
 
     const renderLoop = (timestamp: number) => {
       if (!startTime) startTime = timestamp;
       const elapsed = (timestamp - startTime) / 1000;
+      const mediaTime = Math.min(t0 + elapsed, duration);
       onProgress({
-        stage: `Recording ${elapsed.toFixed(1)}s / ${video.duration.toFixed(1)}s`,
-        progress: Math.min(elapsed / video.duration, 0.99),
+        stage: `Recording ${elapsed.toFixed(1)}s / ${clipDuration.toFixed(1)}s`,
+        progress: Math.min(elapsed / clipDuration, 0.99),
       });
 
-      if (video.ended || elapsed >= video.duration) {
+      if (video.ended || elapsed >= clipDuration || mediaTime >= t1) {
         recorder.stop();
         return;
       }
 
-      const timeline = video.duration > 0 ? elapsed / video.duration : 0;
-      const crtCanvas = renderer.renderFrame(video, settings, elapsed);
+      const timeline = duration > 0 ? mediaTime / duration : 0;
+      const crtCanvas = renderer.renderFrame(video, settings, mediaTime);
       drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
       let output: HTMLCanvasElement = crtCanvas;
       if (settings.showBezel) output = applyBezelChrome(output);

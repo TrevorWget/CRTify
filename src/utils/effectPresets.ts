@@ -105,6 +105,26 @@ export const BUILTIN_LAYER_EFFECT_PRESETS: LayerEffectPreset[] = [
       }),
     ],
   },
+  {
+    id: 'grain-hold',
+    name: 'Grain Hold',
+    builtin: true,
+    effects: [
+      createLayerEffect('filmGrain', { intensity: 0.55, speed: 1.4 }),
+      createLayerEffect('holdTear', { intensity: 0.45, speed: 0.65 }),
+      createLayerEffect('afterimage', { intensity: 0.4, speed: 1 }),
+    ],
+  },
+  {
+    id: 'chroma-fade',
+    name: 'Chroma Fade',
+    builtin: true,
+    effects: [
+      createLayerEffect('chromaticPulse', { intensity: 0.55, speed: 1 }),
+      createLayerEffect('afterimage', { intensity: 0.5, speed: 0.9 }),
+      createLayerEffect('echo', { intensity: 0.25, speed: 0.8 }),
+    ],
+  },
 ];
 
 function readCustom(): LayerEffectPreset[] {

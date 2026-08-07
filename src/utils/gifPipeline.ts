@@ -5,6 +5,7 @@ import { CrtRenderer } from './webgl';
 import { drawTextLayers } from './textCompositor';
 import { imageDataToCanvas } from './mediaLoader';
 import { percentToScale } from './imageExport';
+import { selectFrameIndexes } from './exportRange';
 
 const frameCanvas = document.createElement('canvas');
 const frameCtx = frameCanvas.getContext('2d')!;
@@ -29,6 +30,8 @@ export interface GifExportSettings {
   gifQuality: number;
   frameSkip: number;
   dither: boolean;
+  rangeStart?: number;
+  rangeEnd?: number;
 }
 
 function sourceHasTransparency(frames: GifFrame[]): boolean {
@@ -83,13 +86,13 @@ export async function exportGif(
   encodeCanvas.height = height;
 
   const usesTransparency = settings.curvature > 0 || sourceHasTransparency(frames);
-  const selectedIndexes: number[] = [];
-  for (let i = 0; i < frames.length; i += frameSkip) {
-    selectedIndexes.push(i);
-  }
-  if (selectedIndexes[selectedIndexes.length - 1] !== frames.length - 1) {
-    selectedIndexes.push(frames.length - 1);
-  }
+  const selectedIndexes = selectFrameIndexes(
+    frames.length,
+    frameSkip,
+    exportSettings.rangeStart,
+    exportSettings.rangeEnd,
+  );
+  if (selectedIndexes.length === 0) selectedIndexes.push(0);
 
   return new Promise((resolve, reject) => {
     const gif = new GIF({

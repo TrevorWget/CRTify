@@ -213,6 +213,104 @@ function applyColorCycle(
   ctx.restore();
 }
 
+function applyFilmGrain(
+  canvas: HTMLCanvasElement,
+  effect: LayerEffect,
+  time: number,
+  intensity: number,
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const step = effectStep(effect, time, 24);
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = image.data;
+  const amount = 18 + intensity * 48;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 8) continue;
+    const n =
+      (hash01(`${effect.id}:${step}:g:${i}`) * 2 - 1) * amount * (0.35 + intensity * 0.65);
+    data[i] = Math.min(255, Math.max(0, data[i] + n));
+    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + n));
+    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + n));
+  }
+  ctx.putImageData(image, 0, 0);
+}
+
+function applyChromaticPulse(
+  canvas: HTMLCanvasElement,
+  effect: LayerEffect,
+  time: number,
+  intensity: number,
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx || !prepareBuffer(canvas)) return;
+  const pulse = 0.35 + 0.65 * Math.abs(Math.sin(effectClock(effect, time) * Math.PI * 2));
+  const offset = canvas.width * 0.022 * intensity * pulse;
+  ctx.save();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = 'screen';
+  drawTintedSource(ctx, '#ff3030', offset, 0.7);
+  drawTintedSource(ctx, '#30ffff', -offset, 0.7);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1 - intensity * 0.25 * pulse;
+  ctx.drawImage(bufferCanvas, 0, 0);
+  ctx.restore();
+}
+
+function applyHoldTear(
+  canvas: HTMLCanvasElement,
+  effect: LayerEffect,
+  time: number,
+  intensity: number,
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx || !prepareBuffer(canvas)) return;
+  const clock = effectClock(effect, time);
+  const bandY = ((clock + effect.phase) % 1) * canvas.height;
+  const bandH = Math.max(12, Math.round(canvas.height * (0.08 + intensity * 0.22)));
+  const shift = canvas.width * 0.18 * intensity;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bufferCanvas, 0, 0);
+  ctx.clearRect(0, bandY, canvas.width, bandH);
+  ctx.drawImage(bufferCanvas, 0, bandY, canvas.width, bandH, shift, bandY, canvas.width, bandH);
+  ctx.fillStyle = `rgba(255,244,214,${0.08 + intensity * 0.12})`;
+  ctx.fillRect(0, bandY, canvas.width, 2);
+  ctx.fillRect(0, bandY + bandH - 2, canvas.width, 2);
+}
+
+const afterimageBuffers = new Map<string, HTMLCanvasElement>();
+
+function applyAfterimage(
+  canvas: HTMLCanvasElement,
+  layer: TextLayer,
+  _effect: LayerEffect,
+  intensity: number,
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  let trail = afterimageBuffers.get(layer.id);
+  if (!trail) {
+    trail = document.createElement('canvas');
+    afterimageBuffers.set(layer.id, trail);
+  }
+  if (trail.width !== canvas.width || trail.height !== canvas.height) {
+    trail.width = canvas.width;
+    trail.height = canvas.height;
+  }
+  const trailCtx = trail.getContext('2d');
+  if (!trailCtx) return;
+
+  ctx.save();
+  ctx.globalAlpha = 0.2 + intensity * 0.55;
+  ctx.drawImage(trail, 0, 0);
+  ctx.restore();
+
+  trailCtx.clearRect(0, 0, trail.width, trail.height);
+  trailCtx.globalAlpha = 0.55 + intensity * 0.35;
+  trailCtx.drawImage(canvas, 0, 0);
+  trailCtx.globalAlpha = 1;
+}
+
 /** Apply deterministic pixel/compositing effects in list order. */
 export function applyLayerCanvasEffects(
   canvas: HTMLCanvasElement,
@@ -246,6 +344,18 @@ export function applyLayerCanvasEffects(
         break;
       case 'colorCycle':
         applyColorCycle(canvas, effect, time, intensity);
+        break;
+      case 'filmGrain':
+        applyFilmGrain(canvas, effect, time, intensity);
+        break;
+      case 'chromaticPulse':
+        applyChromaticPulse(canvas, effect, time, intensity);
+        break;
+      case 'holdTear':
+        applyHoldTear(canvas, effect, time, intensity);
+        break;
+      case 'afterimage':
+        applyAfterimage(canvas, layer, effect, intensity);
         break;
     }
   }
