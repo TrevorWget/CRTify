@@ -152,8 +152,12 @@ export function PreviewCanvas({
     <div className="preview-canvas" ref={containerRef}>
       {!media ? (
         <div className="preview-placeholder">
-          <span className="preview-icon">▣</span>
-          <p>Upload an image, GIF, animated WebP, or video to preview CRT effects</p>
+          <div className="placeholder-reticle" aria-hidden="true">
+            <span className="preview-icon">CRT</span>
+          </div>
+          <span className="placeholder-code">NO SIGNAL // INPUT 01</span>
+          <p>INSERT MEDIA</p>
+          <small>IMAGE · GIF · ANIMATED WEBP · VIDEO</small>
         </div>
       ) : (
         <>
