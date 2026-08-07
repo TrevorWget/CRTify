@@ -21,6 +21,11 @@ uniform float u_rgbMask;
 uniform float u_interlace;
 uniform float u_rollBar;
 uniform float u_phosphorDecay;
+// x = amount, y = speed, z = phase
+uniform vec3 u_layerWave;
+uniform vec3 u_layerRipple;
+uniform vec3 u_layerBulge;
+uniform vec3 u_layerShimmer;
 
 varying vec2 v_texCoord;
 
@@ -34,6 +39,39 @@ vec2 curveUV(vec2 uv, float amount) {
   return uv + centered * dist * amount;
 }
 
+vec2 layerDistortUV(vec2 uv) {
+  float tau = 6.2831853;
+
+  if (u_layerWave.x > 0.001) {
+    float phase = (u_time * u_layerWave.y + u_layerWave.z) * tau;
+    uv.x += sin(uv.y * 12.0 + phase) * 0.035 * u_layerWave.x;
+  }
+
+  if (u_layerRipple.x > 0.001) {
+    vec2 centered = uv - 0.5;
+    float radius = length(centered);
+    float phase = (u_time * u_layerRipple.y + u_layerRipple.z) * tau;
+    float displacement = sin(radius * 32.0 - phase) * 0.018 * u_layerRipple.x;
+    uv += normalize(centered + vec2(0.0001)) * displacement;
+  }
+
+  if (u_layerBulge.x > 0.001) {
+    vec2 centered = uv - 0.5;
+    float radius2 = dot(centered, centered);
+    float phase = (u_time * u_layerBulge.y + u_layerBulge.z) * tau;
+    float breath = 0.55 + sin(phase) * 0.45;
+    uv += centered * radius2 * u_layerBulge.x * breath * 0.7;
+  }
+
+  if (u_layerShimmer.x > 0.001) {
+    float phase = (u_time * u_layerShimmer.y + u_layerShimmer.z) * tau;
+    float haze = sin(uv.y * 65.0 + phase * 2.0) + sin(uv.y * 23.0 - phase);
+    uv.x += haze * 0.0045 * u_layerShimmer.x;
+  }
+
+  return uv;
+}
+
 vec3 sampleImage(vec2 uv) {
   float aberr = u_aberration;
   vec2 dir = normalize(uv - 0.5 + 0.0001);
@@ -44,7 +82,8 @@ vec3 sampleImage(vec2 uv) {
 }
 
 void main() {
-  vec2 uv = curveUV(v_texCoord, u_curvature * 0.5);
+  vec2 uv = layerDistortUV(v_texCoord);
+  uv = curveUV(uv, u_curvature * 0.5);
 
   // Rolling sync bar shifts the sample vertically.
   if (u_rollBar > 0.001) {

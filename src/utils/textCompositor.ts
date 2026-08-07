@@ -1,5 +1,7 @@
 import type { CrtSettings, TextLayer } from '../types/crt';
 import { resolveLayerForRender } from './keyframes';
+import { applyLayerCanvasEffects } from './layerCanvasEffects';
+import { getLayerDistortionOptions, hasLayerDistortion } from './layerShaderEffects';
 import { drawShapeLayer } from './shapeDrawing';
 import { CrtRenderer } from './webgl';
 
@@ -186,12 +188,16 @@ export function drawTextLayers(
     }
     layerCtx.restore();
 
-    const useWarp = crtAffectText || layer.warp > 0;
+    applyLayerCanvasEffects(layerCanvas, layer, timeline);
+
+    const useDistortion = hasLayerDistortion(layer);
+    const useWarp = crtAffectText || layer.warp > 0 || useDistortion;
     if (useWarp) {
       textEffectRenderer ??= new CrtRenderer();
       const effectSettings = getTextEffectSettings(settings, layer.warp, crtAffectText);
-      const renderedLayer = textEffectRenderer.renderFrame(layerCanvas, effectSettings, 0, {
+      const renderedLayer = textEffectRenderer.renderFrame(layerCanvas, effectSettings, timeline, {
         preserveAlpha: true,
+        layerDistortion: getLayerDistortionOptions(layer),
       });
       ctx.drawImage(renderedLayer, 0, 0);
     } else {

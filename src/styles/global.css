@@ -2028,6 +2028,55 @@ label:focus-within {
   flex: 1 1 90px;
   min-width: 70px;
   max-width: 260px;
+  height: 18px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: ew-resize;
+  accent-color: var(--accent);
+}
+
+.scrubber::-webkit-slider-runnable-track {
+  height: 6px;
+  border: 1px solid #8b651c;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 11px, rgba(255, 176, 0, 0.35) 11px 12px),
+    #090705;
+  box-shadow: inset 0 1px 2px #000;
+}
+
+.scrubber::-moz-range-track {
+  height: 6px;
+  border: 1px solid #8b651c;
+  background: #090705;
+  box-shadow: inset 0 1px 2px #000;
+}
+
+.scrubber::-webkit-slider-thumb {
+  width: 13px;
+  height: 18px;
+  margin-top: -7px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid #7c3e08;
+  border-radius: 0;
+  background: var(--accent);
+  box-shadow:
+    inset 2px 0 0 var(--cream),
+    2px 2px 0 #000;
+}
+
+.scrubber::-moz-range-thumb {
+  width: 13px;
+  height: 18px;
+  border: 1px solid #7c3e08;
+  border-radius: 0;
+  background: var(--accent);
+}
+
+.scrubber:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
 }
 
 .scrub-label {

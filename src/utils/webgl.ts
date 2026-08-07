@@ -2,8 +2,22 @@ import vertSource from '../shaders/crt.vert?raw';
 import fragSource from '../shaders/crt.frag?raw';
 import type { CrtSettings } from '../types/crt';
 
+export interface AnimatedDistortion {
+  amount: number;
+  speed: number;
+  phase: number;
+}
+
+export interface LayerDistortionOptions {
+  wave?: AnimatedDistortion;
+  ripple?: AnimatedDistortion;
+  bulge?: AnimatedDistortion;
+  shimmer?: AnimatedDistortion;
+}
+
 interface RenderOptions {
   preserveAlpha?: boolean;
+  layerDistortion?: LayerDistortionOptions;
 }
 
 function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader {
@@ -123,6 +137,7 @@ export class CrtRenderer {
           : (source as HTMLImageElement | HTMLCanvasElement).height;
     this.resize(srcWidth, srcHeight);
     const preserveAlpha = options.preserveAlpha ?? false;
+    const distortion = options.layerDistortion ?? {};
 
     gl.clearColor(0, 0, 0, preserveAlpha ? 0 : 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -178,6 +193,19 @@ export class CrtRenderer {
       }
     }
     gl.uniform3f(gl.getUniformLocation(program, 'u_tint'), tr, tg, tb);
+    const setDistortion = (name: string, effect?: AnimatedDistortion) => {
+      const loc = gl.getUniformLocation(program, name);
+      gl.uniform3f(
+        loc,
+        effect?.amount ?? 0,
+        effect?.speed ?? 0,
+        effect?.phase ?? 0,
+      );
+    };
+    setDistortion('u_layerWave', distortion.wave);
+    setDistortion('u_layerRipple', distortion.ripple);
+    setDistortion('u_layerBulge', distortion.bulge);
+    setDistortion('u_layerShimmer', distortion.shimmer);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 

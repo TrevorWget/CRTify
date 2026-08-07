@@ -103,7 +103,21 @@ export interface LayerKeyframe {
 }
 
 /** Procedural transform animations applied after keyframe sampling. */
-export type LayerEffectKind = 'jitter' | 'bob' | 'pulse' | 'spin' | 'shake' | 'blink';
+export type LayerEffectKind =
+  | 'jitter'
+  | 'bob'
+  | 'pulse'
+  | 'spin'
+  | 'shake'
+  | 'blink'
+  | 'glitch'
+  | 'static'
+  | 'rgbSplit'
+  | 'echo'
+  | 'wave'
+  | 'ripple'
+  | 'bulge'
+  | 'shimmer';
 
 export interface LayerEffect {
   id: string;
@@ -128,6 +142,14 @@ export const LAYER_EFFECT_OPTIONS: ReadonlyArray<{
   { id: 'spin', label: 'Spin', description: 'Continuous rotation' },
   { id: 'shake', label: 'Shake', description: 'Horizontal vibration' },
   { id: 'blink', label: 'Blink', description: 'Opacity flicker' },
+  { id: 'glitch', label: 'Glitch', description: 'Jumping horizontal slices' },
+  { id: 'static', label: 'Static', description: 'Seeded analog noise speckles' },
+  { id: 'rgbSplit', label: 'RGB Split', description: 'Offset red and cyan echoes' },
+  { id: 'echo', label: 'Echo', description: 'Trailing translucent copies' },
+  { id: 'wave', label: 'Wave', description: 'Sine-wave image displacement' },
+  { id: 'ripple', label: 'Ripple', description: 'Concentric animated ripples' },
+  { id: 'bulge', label: 'Bulge', description: 'Breathing lens distortion' },
+  { id: 'shimmer', label: 'Shimmer', description: 'Fine heat-haze distortion' },
 ];
 
 export interface TextLayer {
@@ -309,6 +331,14 @@ export function createLayerEffect(kind: LayerEffectKind, partial: Partial<LayerE
     spin: { intensity: 0.5, speed: 0.75, phase: 0 },
     shake: { intensity: 0.45, speed: 2.2, phase: 0 },
     blink: { intensity: 0.7, speed: 1.8, phase: 0 },
+    glitch: { intensity: 0.45, speed: 1.5, phase: 0 },
+    static: { intensity: 0.35, speed: 2, phase: 0 },
+    rgbSplit: { intensity: 0.4, speed: 1, phase: 0 },
+    echo: { intensity: 0.35, speed: 1, phase: 0 },
+    wave: { intensity: 0.4, speed: 1, phase: 0 },
+    ripple: { intensity: 0.35, speed: 1, phase: 0 },
+    bulge: { intensity: 0.35, speed: 0.75, phase: 0 },
+    shimmer: { intensity: 0.3, speed: 1.5, phase: 0 },
   };
   return normalizeLayerEffect({ kind, ...defaults[kind], ...partial });
 }
