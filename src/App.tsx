@@ -190,14 +190,24 @@ export default function App() {
   );
 
   const exportDefaultName = defaultExportFilename(textLayers[0]?.text);
+  const systemStatus = exporting ? 'ENCODING' : loading ? 'LOADING' : media ? 'MEDIA ONLINE' : 'STANDBY';
 
   return (
     <div className="app">
       <header className="app-header">
-        <h1 className="app-title">
-          <span className="title-glow">CRTify</span>
-        </h1>
-        <p className="app-subtitle">CRT monitor overlay generator</p>
+        <div className="brand-lockup">
+          <span className="brand-serial">VIDEO PROCESSING UNIT // CR-78</span>
+          <h1 className="app-title">
+            <span className="title-glow">CRTify</span>
+          </h1>
+        </div>
+        <div className="system-status" role="status" aria-live="polite">
+          <span className={`status-led ${media ? 'status-led-active' : ''}`} aria-hidden="true" />
+          <span>
+            SYS.STATUS
+            <strong>{systemStatus}</strong>
+          </span>
+        </div>
         <div className="history-actions">
           <button
             type="button"
@@ -226,6 +236,7 @@ export default function App() {
       <main className="app-main">
         <aside className="sidebar sidebar-left">
           <div className="sidebar-section sidebar-section-fixed">
+            <span className="module-label">01 / INPUT BAY</span>
             <MediaUploader
               onFileSelect={loadFile}
               loading={loading}
@@ -234,6 +245,7 @@ export default function App() {
             />
           </div>
           <div className="sidebar-section sidebar-section-scroll">
+            <span className="module-label">02 / TYPE DECK</span>
             <TextOverlayEditor
               layers={textLayers}
               selectedLayerId={selectedLayerId}
@@ -248,6 +260,11 @@ export default function App() {
         </aside>
 
         <section className="preview-section">
+          <div className="preview-faceplate">
+            <div className="faceplate-label">
+              <span>CRT-09 VISUAL MONITOR</span>
+              <span>COMPOSITE SIGNAL</span>
+            </div>
           <PreviewCanvas
             media={media}
             settings={settings}
@@ -261,10 +278,17 @@ export default function App() {
             onTogglePlay={() => setIsPlaying((p) => !p)}
             onGifFrameChange={setGifFrameIndex}
           />
+            <div className="faceplate-footer" aria-hidden="true">
+              <span>◉ POWER</span>
+              <span>H-SYNC / V-SYNC</span>
+              <span>MADE FOR THE FUTURE</span>
+            </div>
+          </div>
         </section>
 
         <aside className="sidebar sidebar-right">
           <div className="sidebar-section sidebar-section-scroll">
+            <span className="module-label">03 / SIGNAL PROCESSOR</span>
             <EffectControls
               settings={settings}
               onChange={handleSettingsChange}
@@ -286,10 +310,9 @@ export default function App() {
       )}
 
       <footer className="app-footer">
-        <p>
-          Max resolution 4096px · GIFs up to 1200 frames / 1 GB decode · Video export up to ~3 min
-          at 30fps (browser memory dependent)
-        </p>
+        <span>CRTIFY INDUSTRIES // VISUAL SYSTEMS DIVISION</span>
+        <p>4096PX MAX · 1200 FRAME BUFFER · LOCAL PROCESSING</p>
+        <span>UNIT 01-A</span>
       </footer>
     </div>
   );
