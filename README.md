@@ -1,75 +1,95 @@
 # CRTify
 
-A browser-based CRT monitor overlay generator. Upload images, GIFs, or videos, apply retro CRT effects and draggable text overlays, then export — all client-side with no server required.
+Browser-based CRT monitor overlay editor. Upload an image, GIF, animated WebP, or video; apply CRT looks and overlays; export — entirely client-side, no server required.
 
 ## Features
 
-- **CRT effects**: curvature, scanlines, chromatic aberration, vignette, noise, bloom, phosphor tint, brightness/contrast, flicker
-- **Text overlays**: multiple draggable layers with retro fonts (VT323, Press Start 2P), glow, and opacity
-- **Media support**: PNG/JPEG/WebP images, animated GIFs, MP4/WebM videos
-- **Export**: PNG, JPEG, WebP, GIF (re-encoded), MP4/WebM (via ffmpeg.wasm or MediaRecorder fallback)
-- **Live preview** with play/pause for GIFs and videos
+- **CRT look**: curvature, scanlines, chromatic aberration, vignette, noise, bloom, phosphor tint, brightness/contrast, flicker, RGB mask, interlace, roll bar, phosphor decay, optional TV bezel
+- **Look presets**: VHS, Arcade, Amber, Broadcast, Security, plus custom presets saved in localStorage; shareable look URL hash (`#look=…`)
+- **Overlays**: text (multiline, custom fonts), shapes, and stickers — with glow, blur, brightness, stroke, warp, skew, and CRT-aware distortion
+- **Keyframes**: animate overlay opacity and position across a GIF/WebP/video timeline
+- **Media**: PNG/JPEG/WebP, animated GIF/WebP, MP4/WebM; clipboard paste, webcam capture, batch stills
+- **Projects**: save/load `.crtify.json` (reattach media after load)
+- **Export**: PNG, JPEG, WebP (still or animated), GIF, MP4, WebM — including cross-format export and optional keep-audio remux for video
+- **Live preview** with play/pause for animations and video
+- **PWA shell** for offline install of the app shell
 
-## Getting Started
+## Getting started
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173
-
-## Build
+Open the URL Vite prints (usually `http://localhost:5173`).
 
 ```bash
-npm run build
-npm run preview
+npm run build    # output in dist/
+npm run preview  # local production preview
+npm run lint
 ```
 
-Output is in `dist/`.
+## Usage (quick)
+
+1. **Insert media** — drop a file, use the uploader, paste from the clipboard, or capture from the webcam.
+2. **Tune the CRT** — use Effect controls or pick a Look Preset.
+3. **Add overlays** — text, shapes, or stickers; drag on the preview to place them.
+4. **Keyframes** (animated media) — select a layer, set position/opacity, then store `@ 0%` / `@ 50%` / `@ 100%` of the timeline. Values interpolate between points during preview and export.
+5. **Export** — choose format and encoding options from the Export menu (defaults follow the uploaded type when possible).
+
+Undo/Redo is available for editor state. Projects can be saved as `.crtify.json` and reopened later (you’ll need to reattach the original media file).
 
 ## Deployment
 
-CRTify is a static SPA. Production is configured for the custom domain
-[`https://crtify.trevorwilliams.dev`](https://crtify.trevorwilliams.dev)
-(`base: '/'` in [`vite.config.ts`](vite.config.ts), plus [`public/CNAME`](public/CNAME)).
+CRTify is a static SPA. The included GitHub Actions workflow (`.github/workflows/deploy.yml`) builds and deploys on pushes to `main` when Pages is set to **Source: GitHub Actions**.
 
-Video export uses ffmpeg.wasm, which requires these HTTP headers for `SharedArrayBuffer`:
+### Base path
+
+Vite’s `base` in [`vite.config.ts`](vite.config.ts) must match how the site is hosted:
+
+| Hosting | Typical `base` | Also update |
+| --- | --- | --- |
+| Custom domain / site root (e.g. `https://example.com/`) | `'/'` | `public/manifest.webmanifest` (`start_url`, `scope`, icon `src`) |
+| GitHub Pages project site (`https://<user>.github.io/<repo>/`) | `'/<repo>/'` | Same manifest fields to match that path |
+
+If you use a custom domain on GitHub Pages, add a [`public/CNAME`](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site) file containing only the hostname (Vite copies `public/` into `dist`), then:
+
+1. Point DNS (CNAME subdomain → `<user>.github.io`, or apex A/ALIAS records per GitHub’s docs).
+2. Repo → **Settings** → **Pages** → **Custom domain** → save your domain.
+3. Enable **Enforce HTTPS** after DNS verifies.
+
+### SharedArrayBuffer / video export
+
+ffmpeg.wasm works best with these headers (set for local Vite `server` / `preview` in `vite.config.ts`):
 
 ```
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-### GitHub Pages (custom domain)
-
-1. DNS: create a **CNAME** for `crtify.trevorwilliams.dev` → `trevorwget.github.io`.
-2. Repo → **Settings** → **Pages** → **Custom domain** → `crtify.trevorwilliams.dev` → Save.
-3. After DNS verifies, enable **Enforce HTTPS**.
-4. The included workflow (`.github/workflows/deploy.yml`) builds and deploys on pushes to `main` (Source: **GitHub Actions**).
-
-To serve from the project path `https://<user>.github.io/CRTify/` instead, set `base: '/CRTify/'` and update the PWA `start_url` / `scope` / icon paths in `public/manifest.webmanifest`.
+GitHub Pages does not apply [`public/_headers`](public/_headers) (that file is for Netlify). Export still often works via blob URLs; if video encode fails in a given host, check whether those headers are available.
 
 ### Netlify
 
-A [`public/_headers`](public/_headers) file is included for Netlify deployments.
+Deploy `dist/` (or connect the repo and use the default Vite build). [`public/_headers`](public/_headers) supplies COOP/COEP when using Netlify.
 
 ## Limits
 
-These are soft ceilings chosen for browser memory, not hard format limits:
+Soft ceilings for browser memory (not hard format limits):
 
 - Max resolution: 4096×4096
-- GIFs: up to 1200 frames, subject to a resolution-aware 1 GB decode guard
+- GIF / animated WebP: up to 1200 frames, with a resolution-aware ~1 GB decode guard
 - Video export: up to ~3 minutes at 30fps (~5400 processed frames)
 
-Going higher is possible in theory, but decoded GIFs and ffmpeg.wasm frame buffers can exhaust tab memory and crash the page.
+Higher settings can exhaust tab memory and crash the page.
 
-## Tech Stack
+## Tech stack
 
 - Vite + React + TypeScript
 - WebGL CRT shader
-- gifuct-js + gif.js for GIF processing
-- @ffmpeg/ffmpeg for video export
+- gifuct-js + gif.js for GIF decode/encode
+- wasm-webp for animated WebP fallback decode
+- @ffmpeg/ffmpeg for video export / audio remux
 
 ## License
 
