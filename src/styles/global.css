@@ -1936,3 +1936,33 @@ label:focus-within {
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
 }
+
+.media-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.media-heading h3 {
+  margin-bottom: 0;
+}
+
+.media-filename {
+  min-width: 0;
+  max-width: 58%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+}
+
+.shape-picker button {
+  min-width: 0;
+  flex: 0 1 auto;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.68rem;
+}

@@ -63,7 +63,34 @@ export type FontFamily = BuiltinFontFamily | (string & {});
 
 export type TextAlignment = 'left' | 'center' | 'right';
 export type OverlayLayerKind = 'text' | 'image' | 'shape';
-export type ShapeKind = 'rect' | 'ellipse';
+export type ShapeKind =
+  | 'rect'
+  | 'ellipse'
+  | 'triangle'
+  | 'star'
+  | 'heart'
+  | 'plus'
+  | 'speech'
+  | 'rewind'
+  | 'fastforward'
+  | 'diamond'
+  | 'hexagon'
+  | 'arrow';
+
+export const SHAPE_OPTIONS: { id: ShapeKind; label: string }[] = [
+  { id: 'rect', label: 'Rect' },
+  { id: 'ellipse', label: 'Ellipse' },
+  { id: 'triangle', label: 'Triangle' },
+  { id: 'diamond', label: 'Diamond' },
+  { id: 'hexagon', label: 'Hex' },
+  { id: 'star', label: 'Star' },
+  { id: 'heart', label: 'Heart' },
+  { id: 'plus', label: 'Plus' },
+  { id: 'arrow', label: 'Arrow' },
+  { id: 'speech', label: 'Speech' },
+  { id: 'rewind', label: 'Rewind' },
+  { id: 'fastforward', label: 'FF' },
+];
 
 /** Normalized timeline keyframe (t in 0–1 across media duration / loop). */
 export interface LayerKeyframe {

@@ -1,5 +1,6 @@
 import type { CrtSettings, TextLayer } from '../types/crt';
 import { resolveLayerAtTime } from './keyframes';
+import { drawShapeLayer } from './shapeDrawing';
 import { CrtRenderer } from './webgl';
 
 let textEffectRenderer: CrtRenderer | null = null;
@@ -68,29 +69,22 @@ function drawTextBlock(ctx: CanvasRenderingContext2D, layer: TextLayer) {
   });
 }
 
-function drawShape(ctx: CanvasRenderingContext2D, layer: TextLayer, width: number, height: number) {
-  const w = Math.max(8, width * Math.abs(layer.scaleX));
-  const h = Math.max(8, height * Math.abs(layer.scaleY));
-  ctx.fillStyle = layer.color;
-  ctx.strokeStyle = layer.strokeColor;
-  ctx.lineWidth = layer.strokeWidth;
-  if (layer.shape === 'ellipse') {
-    ctx.beginPath();
-    ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
-    ctx.fill();
-    if (layer.strokeWidth > 0) ctx.stroke();
-  } else {
-    ctx.fillRect(-w / 2, -h / 2, w, h);
-    if (layer.strokeWidth > 0) ctx.strokeRect(-w / 2, -h / 2, w, h);
-  }
-}
-
 function drawImageLayer(ctx: CanvasRenderingContext2D, layer: TextLayer, canvasW: number, canvasH: number) {
   const image = layer.imageElement;
   if (!image) return;
   const targetW = Math.max(8, canvasW * Math.abs(layer.scaleX));
   const targetH = Math.max(8, canvasH * Math.abs(layer.scaleY));
+  if (layer.glow > 0) {
+    ctx.shadowColor = layer.color;
+    ctx.shadowBlur = layer.glow;
+  }
   ctx.drawImage(image, -targetW / 2, -targetH / 2, targetW, targetH);
+  if (layer.strokeWidth > 0) {
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = layer.strokeColor;
+    ctx.lineWidth = layer.strokeWidth;
+    ctx.strokeRect(-targetW / 2, -targetH / 2, targetW, targetH);
+  }
 }
 
 function getTextEffectSettings(
@@ -186,13 +180,13 @@ export function drawTextLayers(
         layerCtx.shadowColor = layer.color;
         layerCtx.shadowBlur = layer.glow;
       }
-      drawShape(layerCtx, layer, width, height);
+      drawShapeLayer(layerCtx, layer, width, height);
     } else if (layer.kind === 'image') {
       drawImageLayer(layerCtx, layer, width, height);
     }
     layerCtx.restore();
 
-    const useWarp = layer.kind === 'text' && (crtAffectText || layer.warp > 0);
+    const useWarp = crtAffectText || layer.warp > 0;
     if (useWarp) {
       textEffectRenderer ??= new CrtRenderer();
       const effectSettings = getTextEffectSettings(settings, layer.warp, crtAffectText);

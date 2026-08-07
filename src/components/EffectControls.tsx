@@ -10,6 +10,28 @@ interface EffectControlsProps {
   onApplyPreset: (preset: CrtPreset) => void;
 }
 
+const EFFECT_HELP: Record<string, string> = {
+  Curvature: 'Barrel-warps the image like a curved CRT glass face.',
+  'Scanline Intensity': 'How dark the horizontal phosphor scanlines appear.',
+  'Scanline Count': 'How many horizontal scanlines are drawn across the frame.',
+  'Chromatic Aberration': 'Splits red/blue channels at the edges for a misaligned lens look.',
+  Vignette: 'Darkens the corners to mimic a tube monitor falloff.',
+  Noise: 'Adds analog grain / static on top of the picture.',
+  Bloom: 'Soft glow around bright areas, like overdriven phosphors.',
+  'Tint Strength': 'How strongly the phosphor tint colors the whole image.',
+  'Phosphor Tint': 'Base glow color mixed into the picture (amber, green, etc.).',
+  Brightness: 'Overall picture brightness after CRT processing.',
+  Contrast: 'Expands or flattens the tonal range of the picture.',
+  Flicker: 'Subtle brightness pulsing like an unstable CRT power supply.',
+  'Flicker Intensity': 'How strong the flicker pulse is when flicker is enabled.',
+  'CRT-affect text': 'Also run overlay layers through the CRT shader stack.',
+  'RGB Mask': 'Aperture-grille / shadow-mask RGB stripe pattern over the screen.',
+  Interlace: 'Darkens alternate fields for a broadcast interlaced look.',
+  'Roll Bar': 'Vertical rolling sync bar that drifts through the frame.',
+  'Phosphor Decay': 'Ghosting / persistence trail from previous phosphor glow.',
+  'Show Bezel': 'Composite a TV chrome bezel around exported frames.',
+};
+
 function Slider({
   label,
   value,
@@ -27,10 +49,16 @@ function Slider({
   onChange: (v: number) => void;
   onReset: () => void;
 }) {
+  const help = EFFECT_HELP[label];
   return (
-    <div className="control-row">
+    <div className="control-row" title={help}>
       <span className="control-label">
-        <button type="button" className="effect-reset-label" onClick={onReset} title="Reset to default">
+        <button
+          type="button"
+          className="effect-reset-label"
+          onClick={onReset}
+          title={help ? `${help} Click to reset.` : 'Reset to default'}
+        >
           {label}
         </button>
         <span className="control-value">{value.toFixed(2)}</span>
@@ -41,6 +69,7 @@ function Slider({
         max={max}
         step={step}
         value={value}
+        title={help}
         onChange={(e) => onChange(parseFloat(e.target.value))}
       />
     </div>
@@ -138,13 +167,13 @@ export function EffectControls({
         onChange={(v) => update({ tintStrength: v })}
         onReset={() => update({ tintStrength: defaultCrtSettings.tintStrength })}
       />
-      <div className="control-row">
+      <div className="control-row" title={EFFECT_HELP['Phosphor Tint']}>
         <span className="control-label">
           <button
             type="button"
             className="effect-reset-label"
             onClick={() => update({ tint: defaultCrtSettings.tint })}
-            title="Reset to default"
+            title={`${EFFECT_HELP['Phosphor Tint']} Click to reset.`}
           >
             Phosphor Tint
           </button>
@@ -152,6 +181,7 @@ export function EffectControls({
         <input
           type="color"
           value={settings.tint}
+          title={EFFECT_HELP['Phosphor Tint']}
           onChange={(e) => update({ tint: e.target.value })}
         />
       </div>
@@ -173,13 +203,13 @@ export function EffectControls({
         onChange={(v) => update({ contrast: v })}
         onReset={() => update({ contrast: defaultCrtSettings.contrast })}
       />
-      <div className="control-row toggle-row">
+      <div className="control-row toggle-row" title={EFFECT_HELP.Flicker}>
         <span className="control-label">
           <button
             type="button"
             className="effect-reset-label"
             onClick={() => update({ flicker: defaultCrtSettings.flicker })}
-            title="Reset to default"
+            title={`${EFFECT_HELP.Flicker} Click to reset.`}
           >
             Flicker
           </button>
@@ -187,6 +217,7 @@ export function EffectControls({
         <input
           type="checkbox"
           checked={settings.flicker}
+          title={EFFECT_HELP.Flicker}
           onChange={(e) => update({ flicker: e.target.checked })}
         />
       </div>
@@ -201,20 +232,21 @@ export function EffectControls({
           onReset={() => update({ flickerIntensity: defaultCrtSettings.flickerIntensity })}
         />
       )}
-      <div className="control-row toggle-row">
+      <div className="control-row toggle-row" title={EFFECT_HELP['CRT-affect text']}>
         <span className="control-label">
           <button
             type="button"
             className="effect-reset-label"
             onClick={() => onCrtAffectTextChange(false)}
-            title="Reset to default"
+            title={`${EFFECT_HELP['CRT-affect text']} Click to reset.`}
           >
-            CRT-affect text
+            CRT-affect overlays
           </button>
         </span>
         <input
           type="checkbox"
           checked={crtAffectText}
+          title={EFFECT_HELP['CRT-affect text']}
           onChange={(e) => onCrtAffectTextChange(e.target.checked)}
         />
       </div>
@@ -256,13 +288,13 @@ export function EffectControls({
         onChange={(v) => update({ phosphorDecay: v })}
         onReset={() => update({ phosphorDecay: defaultCrtSettings.phosphorDecay })}
       />
-      <div className="control-row toggle-row">
+      <div className="control-row toggle-row" title={EFFECT_HELP['Show Bezel']}>
         <span className="control-label">
           <button
             type="button"
             className="effect-reset-label"
             onClick={() => update({ showBezel: defaultCrtSettings.showBezel })}
-            title="Reset to default"
+            title={`${EFFECT_HELP['Show Bezel']} Click to reset.`}
           >
             Show Bezel
           </button>
@@ -270,6 +302,7 @@ export function EffectControls({
         <input
           type="checkbox"
           checked={settings.showBezel}
+          title={EFFECT_HELP['Show Bezel']}
           onChange={(e) => update({ showBezel: e.target.checked })}
         />
       </div>
