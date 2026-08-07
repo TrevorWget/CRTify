@@ -3,6 +3,7 @@ import type { CrtSettings, LoadedMedia, TextLayer } from '../types/crt';
 import { CrtRenderer } from '../utils/webgl';
 import { drawTextLayers } from '../utils/textCompositor';
 import { imageDataToCanvas } from '../utils/mediaLoader';
+import { isFrameSequenceMedia } from '../utils/animationMedia';
 
 interface UseCrtRendererOptions {
   media: LoadedMedia | null;
@@ -43,7 +44,7 @@ export function useCrtRenderer({
 
     if (media.type === 'image' && media.image) {
       source = media.image;
-    } else if (media.type === 'gif' && media.gifFrames) {
+    } else if (isFrameSequenceMedia(media) && media.gifFrames) {
       const frame = media.gifFrames[gifFrameIndex % media.gifFrames.length];
       source = imageDataToCanvas(frame.imageData);
       time = gifFrameIndex * 0.1;
@@ -73,7 +74,7 @@ export function useCrtRenderer({
   useEffect(() => {
     if (!media || !isPlaying) return;
 
-    if (media.type === 'gif' && media.gifFrames) {
+    if (isFrameSequenceMedia(media) && media.gifFrames) {
       let frameIdx = gifFrameIndex;
       let lastTime = performance.now();
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CrtSettings, LoadedMedia, TextLayer } from '../types/crt';
 import { useCrtRenderer } from '../hooks/useCrtRenderer';
 import { hitTestTextLayer } from '../utils/textCompositor';
+import { isPlayableMedia } from '../utils/animationMedia';
 
 interface PreviewCanvasProps {
   media: LoadedMedia | null;
@@ -152,7 +153,7 @@ export function PreviewCanvas({
       {!media ? (
         <div className="preview-placeholder">
           <span className="preview-icon">▣</span>
-          <p>Upload an image, GIF, or video to preview CRT effects</p>
+          <p>Upload an image, GIF, animated WebP, or video to preview CRT effects</p>
         </div>
       ) : (
         <>
@@ -197,7 +198,7 @@ export function PreviewCanvas({
                 100%
               </button>
             </div>
-            {(media.type === 'gif' || media.type === 'video') && (
+            {isPlayableMedia(media) && (
               <button type="button" className="btn btn-small" onClick={onTogglePlay}>
                 {isPlaying ? '⏸ Pause' : '▶ Play'}
               </button>

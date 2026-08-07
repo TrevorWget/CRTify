@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import type { LoadedMedia } from '../types/crt';
+import { isPlayableMedia } from '../utils/animationMedia';
 import { loadMediaFile, revokeMedia } from '../utils/mediaLoader';
 
 export function useMediaLoader() {
@@ -24,7 +25,7 @@ export function useMediaLoader() {
       const loaded = await loadMediaFile(file);
       mediaRef.current = loaded;
       setMedia(loaded);
-      if (loaded.type === 'gif' || loaded.type === 'video') {
+      if (isPlayableMedia(loaded)) {
         setIsPlaying(true);
       }
     } catch (err) {
