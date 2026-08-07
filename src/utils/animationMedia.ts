@@ -18,6 +18,7 @@ export function isPlayableMedia(media: LoadedMedia | null | undefined): boolean 
 export function getTimelinePosition(
   media: LoadedMedia | null | undefined,
   gifFrameIndex: number,
+  videoTime?: number,
 ): number {
   if (!media) return 0;
   if (isFrameSequenceMedia(media) && media.gifFrames) {
@@ -25,7 +26,8 @@ export function getTimelinePosition(
   }
   if (media.type === 'video' && media.video) {
     const duration = media.video.duration;
-    return duration > 0 ? media.video.currentTime / duration : 0;
+    const current = videoTime ?? media.video.currentTime;
+    return duration > 0 ? current / duration : 0;
   }
   return 0;
 }

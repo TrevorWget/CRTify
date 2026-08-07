@@ -8,7 +8,13 @@ import {
   type OverlayLayerKind,
   type TextLayer,
 } from '../types/crt';
-import { positionUpdate, resolveLayerAtTime, upsertKeyframe } from '../utils/keyframes';
+import {
+  positionUpdate,
+  removeKeyframe,
+  resolveLayerAtTime,
+  updateKeyframe,
+  upsertKeyframe,
+} from '../utils/keyframes';
 
 interface TextOverlayEditorProps {
   layers: TextLayer[];
@@ -98,6 +104,39 @@ function LayerSlider({
   );
 }
 
+function KeyframeField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="keyframe-field">
+      <span>{label}</span>
+      <input
+        type="number"
+        value={Number(value.toFixed(step < 1 ? 2 : 0))}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(event) => {
+          const next = Number(event.target.value);
+          if (Number.isFinite(next)) onChange(Math.min(max, Math.max(min, next)));
+        }}
+      />
+    </label>
+  );
+}
+
 export function TextOverlayEditor({
   layers,
   timeline,
@@ -138,6 +177,14 @@ export function TextOverlayEditor({
     const pose = resolveLayerAtTime(layer, t);
     const frame: LayerKeyframe = { t, x: pose.x, y: pose.y, opacity: pose.opacity };
     onUpdateLayer(layer.id, { keyframes: upsertKeyframe(layer.keyframes, frame) });
+  };
+
+  const patchKeyframe = (layer: TextLayer, id: string, patch: Partial<LayerKeyframe>) => {
+    onUpdateLayer(layer.id, { keyframes: updateKeyframe(layer.keyframes, id, patch) });
+  };
+
+  const deleteKeyframe = (layer: TextLayer, id: string) => {
+    onUpdateLayer(layer.id, { keyframes: removeKeyframe(layer.keyframes, id) });
   };
 
   const clearKeyframes = (layerId: string) => {
@@ -532,23 +579,10 @@ export function TextOverlayEditor({
             <button
               type="button"
               className="btn btn-small"
-              onClick={() => addKeyframe(selected, 0)}
+              onClick={() => addKeyframe(selected, timeline)}
+              title="Store this layer's current position and opacity at the playhead"
             >
-              @ 0%
-            </button>
-            <button
-              type="button"
-              className="btn btn-small"
-              onClick={() => addKeyframe(selected, 0.5)}
-            >
-              @ 50%
-            </button>
-            <button
-              type="button"
-              className="btn btn-small"
-              onClick={() => addKeyframe(selected, 1)}
-            >
-              @ 100%
+              + Keyframe @ {Math.round(timeline * 100)}%
             </button>
             <button
               type="button"
@@ -562,15 +596,58 @@ export function TextOverlayEditor({
           {selected.keyframes.length > 0 && (
             <>
               <small className="keyframe-hint">
-                Dragging on the preview edits the keyframe at the current frame.
+                Scrub the preview to a frame, then drag the layer to edit its keyframe there.
               </small>
               <ul className="keyframe-list">
                 {selected.keyframes.map((kf, index) => (
-                  <li key={`${kf.t}-${index}`} className="keyframe-item">
-                    <span>
-                      t={Math.round(kf.t * 100)}% · x={kf.x?.toFixed(2)} · y={kf.y?.toFixed(2)} · α=
-                      {kf.opacity?.toFixed(2)}
-                    </span>
+                  <li key={kf.id ?? index} className="keyframe-item">
+                    <div className="keyframe-row-head">
+                      <span className="keyframe-index">#{index + 1}</span>
+                      <button
+                        type="button"
+                        className="btn btn-small keyframe-remove"
+                        onClick={() => kf.id && deleteKeyframe(selected, kf.id)}
+                        title="Remove this keyframe"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="keyframe-fields">
+                      <KeyframeField
+                        label="t %"
+                        value={kf.t * 100}
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        onChange={(next) => kf.id && patchKeyframe(selected, kf.id, { t: next / 100 })}
+                      />
+                      <KeyframeField
+                        label="x"
+                        value={kf.x ?? selected.x}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(next) => kf.id && patchKeyframe(selected, kf.id, { x: next })}
+                      />
+                      <KeyframeField
+                        label="y"
+                        value={kf.y ?? selected.y}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(next) => kf.id && patchKeyframe(selected, kf.id, { y: next })}
+                      />
+                      <KeyframeField
+                        label="α"
+                        value={kf.opacity ?? selected.opacity}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(next) =>
+                          kf.id && patchKeyframe(selected, kf.id, { opacity: next })
+                        }
+                      />
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -94,6 +94,8 @@ export const SHAPE_OPTIONS: { id: ShapeKind; label: string }[] = [
 
 /** Normalized timeline keyframe (t in 0–1 across media duration / loop). */
 export interface LayerKeyframe {
+  /** Stable identity so rows keep focus while `t` is edited and the list re-sorts. */
+  id?: string;
   t: number;
   x?: number;
   y?: number;
@@ -260,7 +262,10 @@ export function normalizeCrtSettings(input: Partial<CrtSettings> | null | undefi
 
 export function normalizeTextLayer(input: Partial<TextLayer> & { id?: string }): TextLayer {
   const base = createTextLayer({ id: input.id ?? crypto.randomUUID() });
-  const merged = { ...base, ...input, keyframes: input.keyframes ?? [] };
+  const keyframes = (input.keyframes ?? [])
+    .map((frame) => ({ ...frame, id: frame.id ?? crypto.randomUUID() }))
+    .sort((a, b) => a.t - b.t);
+  const merged = { ...base, ...input, keyframes };
   if (!merged.kind) merged.kind = merged.imageUrl ? 'image' : merged.shape ? 'shape' : 'text';
   return merged;
 }

@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CrtSettings, LoadedMedia, TextLayer } from '../types/crt';
 import { useCrtRenderer } from '../hooks/useCrtRenderer';
 import { hitTestTextLayer } from '../utils/textCompositor';
-import { getTimelinePosition, isPlayableMedia } from '../utils/animationMedia';
+import {
+  getTimelinePosition,
+  isFrameSequenceMedia,
+  isPlayableMedia,
+} from '../utils/animationMedia';
 import { positionUpdate, resolveLayersAtTime } from '../utils/keyframes';
 
 interface PreviewCanvasProps {
@@ -17,6 +21,7 @@ interface PreviewCanvasProps {
   isPlaying: boolean;
   onTogglePlay: () => void;
   onGifFrameChange: (index: number) => void;
+  onVideoTimeChange?: (seconds: number) => void;
 }
 
 const MIN_ZOOM = 0.1;
@@ -35,6 +40,7 @@ export function PreviewCanvas({
   isPlaying,
   onTogglePlay,
   onGifFrameChange,
+  onVideoTimeChange,
 }: PreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -46,8 +52,9 @@ export function PreviewCanvas({
   } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [fitMode, setFitMode] = useState(true);
+  const [videoTime, setVideoTime] = useState(0);
 
-  const { canvasRef } = useCrtRenderer({
+  const { canvasRef, render } = useCrtRenderer({
     media,
     settings,
     textLayers,
@@ -91,6 +98,52 @@ export function PreviewCanvas({
     return () => observer.disconnect();
   }, [fitMode, computeFitZoom]);
 
+  useEffect(() => {
+    const video = media?.type === 'video' ? media.video : null;
+    if (!video) {
+      setVideoTime(0);
+      return;
+    }
+
+    const sync = () => {
+      setVideoTime(video.currentTime);
+      onVideoTimeChange?.(video.currentTime);
+    };
+    sync();
+    video.addEventListener('timeupdate', sync);
+    video.addEventListener('seeked', sync);
+    video.addEventListener('loadedmetadata', sync);
+    return () => {
+      video.removeEventListener('timeupdate', sync);
+      video.removeEventListener('seeked', sync);
+      video.removeEventListener('loadedmetadata', sync);
+    };
+  }, [media, onVideoTimeChange]);
+
+  const scrubTo = useCallback(
+    (value: number) => {
+      if (!media) return;
+      if (isPlaying) onTogglePlay();
+
+      if (isFrameSequenceMedia(media)) {
+        onGifFrameChange(Math.round(value));
+        return;
+      }
+      const video = media.type === 'video' ? media.video : null;
+      if (!video) return;
+      video.currentTime = value;
+      setVideoTime(value);
+      onVideoTimeChange?.(value);
+      // Seeking does not re-run React state, so repaint once the frame lands.
+      const repaint = () => {
+        render();
+        video.removeEventListener('seeked', repaint);
+      };
+      video.addEventListener('seeked', repaint);
+    },
+    [media, isPlaying, onTogglePlay, onGifFrameChange, onVideoTimeChange, render],
+  );
+
   const getCanvasCoords = useCallback(
     (clientX: number, clientY: number) => {
       const canvas = canvasRef.current;
@@ -113,7 +166,7 @@ export function PreviewCanvas({
       if (!coords) return;
 
       // Hit test against animated positions so clicks match what is drawn.
-      const timeline = getTimelinePosition(media, gifFrameIndex);
+      const timeline = getTimelinePosition(media, gifFrameIndex, videoTime);
       const hit = hitTestTextLayer(
         resolveLayersAtTime(textLayers, timeline),
         media.width,
@@ -134,7 +187,7 @@ export function PreviewCanvas({
         onSelectLayer(null);
       }
     },
-    [media, textLayers, gifFrameIndex, getCanvasCoords, onSelectLayer],
+    [media, textLayers, gifFrameIndex, videoTime, getCanvasCoords, onSelectLayer],
   );
 
   const handlePointerMove = useCallback(
@@ -156,6 +209,21 @@ export function PreviewCanvas({
   const handlePointerUp = useCallback(() => {
     setDragging(null);
   }, []);
+
+  const frameCount = media?.gifFrames?.length ?? 0;
+  const videoDuration =
+    media?.type === 'video' && media.video && Number.isFinite(media.video.duration)
+      ? media.video.duration
+      : 0;
+  const usesFrames = isFrameSequenceMedia(media);
+  const scrubMax = usesFrames ? Math.max(0, frameCount - 1) : videoDuration;
+  const scrubStep = usesFrames ? 1 : 0.01;
+  const scrubValue = usesFrames
+    ? Math.min(gifFrameIndex, Math.max(0, frameCount - 1))
+    : Math.min(videoTime, videoDuration);
+  const scrubLabel = usesFrames
+    ? `${Math.min(gifFrameIndex + 1, frameCount)}/${frameCount}`
+    : `${videoTime.toFixed(1)}s`;
 
   const adjustZoom = useCallback((delta: number) => {
     setFitMode(false);
@@ -219,9 +287,23 @@ export function PreviewCanvas({
               </button>
             </div>
             {isPlayableMedia(media) && (
-              <button type="button" className="btn btn-small" onClick={onTogglePlay}>
-                {isPlaying ? '⏸ Pause' : '▶ Play'}
-              </button>
+              <div className="transport-controls">
+                <button type="button" className="btn btn-small" onClick={onTogglePlay}>
+                  {isPlaying ? '⏸ Pause' : '▶ Play'}
+                </button>
+                <input
+                  className="scrubber"
+                  type="range"
+                  min={0}
+                  max={scrubMax}
+                  step={scrubStep}
+                  value={scrubValue}
+                  onChange={(event) => scrubTo(Number(event.target.value))}
+                  aria-label="Timeline position"
+                  title="Scrub timeline"
+                />
+                <span className="scrub-label">{scrubLabel}</span>
+              </div>
             )}
           </div>
           <div className="preview-stage" ref={stageRef}>

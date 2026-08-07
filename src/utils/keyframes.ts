@@ -38,15 +38,48 @@ function sampleChannel(
 /** Two keyframes closer than this on the timeline are treated as the same point. */
 export const KEYFRAME_EPSILON = 0.001;
 
+function sortKeyframes(keyframes: LayerKeyframe[]): LayerKeyframe[] {
+  return [...keyframes].sort((a, b) => a.t - b.t);
+}
+
+export function withKeyframeId(frame: LayerKeyframe): LayerKeyframe {
+  return frame.id ? frame : { ...frame, id: crypto.randomUUID() };
+}
+
 /** Insert a keyframe, replacing any existing point at the same time. */
 export function upsertKeyframe(
   keyframes: LayerKeyframe[],
   frame: LayerKeyframe,
 ): LayerKeyframe[] {
   const t = clamp01(frame.t);
-  return [...keyframes.filter((kf) => Math.abs(kf.t - t) > KEYFRAME_EPSILON), { ...frame, t }].sort(
-    (a, b) => a.t - b.t,
+  const replaced = keyframes.find((kf) => Math.abs(kf.t - t) <= KEYFRAME_EPSILON);
+  const next = withKeyframeId({ ...frame, t, id: frame.id ?? replaced?.id });
+  return sortKeyframes([...keyframes.filter((kf) => kf !== replaced), next]);
+}
+
+/** Patch one keyframe by id; `t` changes re-sort the list. */
+export function updateKeyframe(
+  keyframes: LayerKeyframe[],
+  id: string,
+  patch: Partial<LayerKeyframe>,
+): LayerKeyframe[] {
+  return sortKeyframes(
+    keyframes.map((kf) => {
+      if (kf.id !== id) return kf;
+      const next = { ...kf, ...patch };
+      return {
+        ...next,
+        t: clamp01(next.t),
+        x: next.x === undefined ? undefined : clamp01(next.x),
+        y: next.y === undefined ? undefined : clamp01(next.y),
+        opacity: next.opacity === undefined ? undefined : clamp01(next.opacity),
+      };
+    }),
   );
+}
+
+export function removeKeyframe(keyframes: LayerKeyframe[], id: string): LayerKeyframe[] {
+  return keyframes.filter((kf) => kf.id !== id);
 }
 
 export function findKeyframeAt(
