@@ -30,7 +30,9 @@ Output is in `dist/`.
 
 ## Deployment
 
-CRTify is a static SPA served from the `/CRTify/` base path (GitHub Pages project site).
+CRTify is a static SPA. Production is configured for the custom domain
+[`https://crtify.trevorwilliams.dev`](https://crtify.trevorwilliams.dev)
+(`base: '/'` in [`vite.config.ts`](vite.config.ts), plus [`public/CNAME`](public/CNAME)).
 
 Video export uses ffmpeg.wasm, which requires these HTTP headers for `SharedArrayBuffer`:
 
@@ -39,13 +41,18 @@ Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-### GitHub Pages
+### GitHub Pages (custom domain)
 
-The included workflow (`.github/workflows/deploy.yml`) builds and deploys on pushes to `main`. Enable Pages in repo settings with **Source: GitHub Actions**.
+1. DNS: create a **CNAME** for `crtify.trevorwilliams.dev` → `trevorwget.github.io`.
+2. Repo → **Settings** → **Pages** → **Custom domain** → `crtify.trevorwilliams.dev` → Save.
+3. After DNS verifies, enable **Enforce HTTPS**.
+4. The included workflow (`.github/workflows/deploy.yml`) builds and deploys on pushes to `main` (Source: **GitHub Actions**).
+
+To serve from the project path `https://<user>.github.io/CRTify/` instead, set `base: '/CRTify/'` and update the PWA `start_url` / `scope` / icon paths in `public/manifest.webmanifest`.
 
 ### Netlify
 
-A [`public/_headers`](public/_headers) file is included for Netlify deployments. If hosting at the site root (not `/CRTify/`), change `base` in [`vite.config.ts`](vite.config.ts) to `'/'`.
+A [`public/_headers`](public/_headers) file is included for Netlify deployments.
 
 ## Limits
 

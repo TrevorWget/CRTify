@@ -2,14 +2,14 @@
   "name": "CRTify",
   "short_name": "CRTify",
   "description": "CRT monitor overlay generator for images, GIFs, WebP, and video",
-  "start_url": "/CRTify/",
-  "scope": "/CRTify/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0a0908",
   "theme_color": "#d62818",
   "icons": [
     {
-      "src": "/CRTify/favicon.svg",
+      "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
