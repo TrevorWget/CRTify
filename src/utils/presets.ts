@@ -11,12 +11,14 @@ export const BUILTIN_PRESETS: CrtPreset[] = [
   {
     id: 'default',
     name: 'Studio Default',
+    description: 'A balanced, warm CRT starting point with moderate curvature and scanlines.',
     builtin: true,
     settings: { ...defaultCrtSettings },
   },
   {
     id: 'vhs-tape',
     name: 'VHS Tape',
+    description: 'Noisy home-video playback with color separation, flicker, interlace, and roll.',
     builtin: true,
     settings: {
       ...defaultCrtSettings,
@@ -43,6 +45,7 @@ export const BUILTIN_PRESETS: CrtPreset[] = [
   {
     id: 'arcade',
     name: 'Arcade Cabinet',
+    description: 'Punchy arcade phosphors with strong scanlines, RGB mask, glow, and curved glass.',
     builtin: true,
     settings: {
       ...defaultCrtSettings,
@@ -67,6 +70,7 @@ export const BUILTIN_PRESETS: CrtPreset[] = [
   {
     id: 'amber-terminal',
     name: 'Amber Terminal',
+    description: 'Warm monochrome terminal glow with phosphor persistence and CRT-affected overlays.',
     builtin: true,
     settings: {
       ...defaultCrtSettings,
@@ -91,6 +95,7 @@ export const BUILTIN_PRESETS: CrtPreset[] = [
   {
     id: 'broadcast',
     name: 'Broadcast News',
+    description: 'Clean studio video with fine scanlines, restrained color drift, and a TV bezel.',
     builtin: true,
     settings: {
       ...defaultCrtSettings,
@@ -115,6 +120,7 @@ export const BUILTIN_PRESETS: CrtPreset[] = [
   {
     id: 'security-cam',
     name: 'Security Cam',
+    description: 'High-contrast surveillance feed with grain, heavy vignette, interlace, and sync roll.',
     builtin: true,
     settings: {
       ...defaultCrtSettings,
@@ -168,6 +174,7 @@ export function saveCustomPreset(name: string, settings: CrtSettings, crtAffectT
   const preset: CrtPreset = {
     id: `custom-${crypto.randomUUID()}`,
     name: name.trim() || 'Custom Look',
+    description: 'A custom look saved from your current CRT effect settings.',
     builtin: false,
     settings: normalizeCrtSettings(settings),
     crtAffectText,

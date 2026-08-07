@@ -1,5 +1,5 @@
 /* Minimal offline shell for CRTify (GitHub Pages base /CRTify/). */
-const CACHE = 'crtify-shell-v1';
+const CACHE = 'crtify-shell-v2';
 const PRECACHE = [
   './',
   './index.html',

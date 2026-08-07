@@ -188,6 +188,8 @@ export interface ExportProgress {
 export interface CrtPreset {
   id: string;
   name: string;
+  /** Short human-readable explanation shown on hover. */
+  description?: string;
   builtin?: boolean;
   settings: CrtSettings;
   crtAffectText?: boolean;
