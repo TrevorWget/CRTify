@@ -1,6 +1,5 @@
 import type { CrtSettings, ExportProgress, GifFrame, TextLayer } from '../types/crt';
 import { applyBezelChrome } from './bezelOverlay';
-import { resolveLayersAtTime } from './keyframes';
 import { percentToScale } from './imageExport';
 import { imageDataToCanvas } from './mediaLoader';
 import { drawTextLayers } from './textCompositor';
@@ -93,11 +92,10 @@ export async function exportFramesAsVideo(
       frameCtx.clearRect(0, 0, sourceWidth, sourceHeight);
       frameCtx.putImageData(frames[index].imageData, 0, 0);
       const timeline = selected.length <= 1 ? 0 : step / (selected.length - 1);
-      const layers = resolveLayersAtTime(textLayers, timeline);
       const crtCanvas = renderer.renderFrame(frameCanvas, settings, index * 0.1, {
         preserveAlpha: false,
       });
-      drawTextLayers(crtCanvas, layers, settings, crtAffectText, null, timeline);
+      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
       let output: HTMLCanvasElement = crtCanvas;
       if (settings.showBezel) output = applyBezelChrome(output);
       scaledCtx.fillStyle = '#000';
@@ -189,9 +187,8 @@ export async function rasterizeVideoToFrames(
       });
       await seekVideo(video, time);
       const timeline = video.duration > 0 ? time / video.duration : 0;
-      const layers = resolveLayersAtTime(textLayers, timeline);
       const crtCanvas = renderer.renderFrame(video, settings, time, { preserveAlpha: true });
-      drawTextLayers(crtCanvas, layers, settings, crtAffectText, null, timeline);
+      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
       let output: HTMLCanvasElement = crtCanvas;
       if (settings.showBezel) output = applyBezelChrome(output);
       ctx.clearRect(0, 0, width, height);
@@ -240,14 +237,13 @@ export function stillToLoopFrames(
   try {
     for (let i = 0; i < frameCount; i++) {
       const t = i / frameCount;
-      const layers = resolveLayersAtTime(textLayers, t);
       const crtCanvas = renderer.renderFrame(
         source as HTMLCanvasElement,
         settings,
         i * 0.12,
         { preserveAlpha: true },
       );
-      drawTextLayers(crtCanvas, layers, settings, crtAffectText, null, t);
+      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, t);
       let output: HTMLCanvasElement = crtCanvas;
       if (settings.showBezel) output = applyBezelChrome(output);
       ctx.clearRect(0, 0, width, height);

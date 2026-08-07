@@ -1,14 +1,24 @@
 import { useCallback, useRef, useState } from 'react';
 import {
   BUILTIN_FONTS,
+  LAYER_EFFECT_OPTIONS,
   SHAPE_OPTIONS,
+  createLayerEffect,
   defaultCrtSettings,
   type FontFamily,
+  type LayerEffect,
+  type LayerEffectKind,
   type LayerKeyframe,
   type OverlayLayerKind,
   type TextLayer,
 } from '../types/crt';
-import { positionUpdate, resolveLayerAtTime, upsertKeyframe } from '../utils/keyframes';
+import {
+  positionUpdate,
+  removeKeyframe,
+  resolveLayerAtTime,
+  updateKeyframe,
+  upsertKeyframe,
+} from '../utils/keyframes';
 
 interface TextOverlayEditorProps {
   layers: TextLayer[];
@@ -98,6 +108,39 @@ function LayerSlider({
   );
 }
 
+function KeyframeField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="keyframe-field">
+      <span>{label}</span>
+      <input
+        type="number"
+        value={Number(value.toFixed(step < 1 ? 2 : 0))}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(event) => {
+          const next = Number(event.target.value);
+          if (Number.isFinite(next)) onChange(Math.min(max, Math.max(min, next)));
+        }}
+      />
+    </label>
+  );
+}
+
 export function TextOverlayEditor({
   layers,
   timeline,
@@ -140,8 +183,30 @@ export function TextOverlayEditor({
     onUpdateLayer(layer.id, { keyframes: upsertKeyframe(layer.keyframes, frame) });
   };
 
+  const patchKeyframe = (layer: TextLayer, id: string, patch: Partial<LayerKeyframe>) => {
+    onUpdateLayer(layer.id, { keyframes: updateKeyframe(layer.keyframes, id, patch) });
+  };
+
+  const deleteKeyframe = (layer: TextLayer, id: string) => {
+    onUpdateLayer(layer.id, { keyframes: removeKeyframe(layer.keyframes, id) });
+  };
+
   const clearKeyframes = (layerId: string) => {
     onUpdateLayer(layerId, { keyframes: [] });
+  };
+
+  const addEffect = (layer: TextLayer, kind: LayerEffectKind) => {
+    onUpdateLayer(layer.id, { effects: [...layer.effects, createLayerEffect(kind)] });
+  };
+
+  const patchEffect = (layer: TextLayer, id: string, patch: Partial<LayerEffect>) => {
+    onUpdateLayer(layer.id, {
+      effects: layer.effects.map((effect) => (effect.id === id ? { ...effect, ...patch } : effect)),
+    });
+  };
+
+  const deleteEffect = (layer: TextLayer, id: string) => {
+    onUpdateLayer(layer.id, { effects: layer.effects.filter((effect) => effect.id !== id) });
   };
 
   const handleStickerChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -527,28 +592,94 @@ export function TextOverlayEditor({
             </label>
           )}
 
+          <div className="control-divider">ANIM FX</div>
+          <div className="keyframe-actions">
+            {LAYER_EFFECT_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className="btn btn-small"
+                title={option.description}
+                onClick={() => addEffect(selected, option.id)}
+              >
+                + {option.label}
+              </button>
+            ))}
+          </div>
+          {selected.effects.length > 0 ? (
+            <ul className="keyframe-list">
+              {selected.effects.map((effect, index) => {
+                const meta = LAYER_EFFECT_OPTIONS.find((option) => option.id === effect.kind);
+                return (
+                  <li key={effect.id} className="keyframe-item">
+                    <div className="keyframe-row-head">
+                      <label className="effect-enable">
+                        <input
+                          type="checkbox"
+                          checked={effect.enabled}
+                          onChange={(event) =>
+                            patchEffect(selected, effect.id, { enabled: event.target.checked })
+                          }
+                        />
+                        <span>
+                          #{index + 1} {meta?.label ?? effect.kind}
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        className="btn btn-small keyframe-remove"
+                        onClick={() => deleteEffect(selected, effect.id)}
+                        title="Remove this effect"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <small className="keyframe-hint">{meta?.description}</small>
+                    <div className="keyframe-fields effect-fields">
+                      <KeyframeField
+                        label="Amt"
+                        value={effect.intensity}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(next) => patchEffect(selected, effect.id, { intensity: next })}
+                      />
+                      <KeyframeField
+                        label="Spd"
+                        value={effect.speed}
+                        min={0.05}
+                        max={8}
+                        step={0.05}
+                        onChange={(next) => patchEffect(selected, effect.id, { speed: next })}
+                      />
+                      <KeyframeField
+                        label="Phase"
+                        value={effect.phase}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(next) => patchEffect(selected, effect.id, { phase: next })}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <small className="keyframe-hint">
+              Procedural motion on top of keyframes — jitter, bob, pulse, spin, shake, blink.
+            </small>
+          )}
+
           <div className="control-divider">KEYFRAMES</div>
           <div className="keyframe-actions">
             <button
               type="button"
               className="btn btn-small"
-              onClick={() => addKeyframe(selected, 0)}
+              onClick={() => addKeyframe(selected, timeline)}
+              title="Store this layer's current position and opacity at the playhead"
             >
-              @ 0%
-            </button>
-            <button
-              type="button"
-              className="btn btn-small"
-              onClick={() => addKeyframe(selected, 0.5)}
-            >
-              @ 50%
-            </button>
-            <button
-              type="button"
-              className="btn btn-small"
-              onClick={() => addKeyframe(selected, 1)}
-            >
-              @ 100%
+              + Keyframe @ {Math.round(timeline * 100)}%
             </button>
             <button
               type="button"
@@ -562,15 +693,58 @@ export function TextOverlayEditor({
           {selected.keyframes.length > 0 && (
             <>
               <small className="keyframe-hint">
-                Dragging on the preview edits the keyframe at the current frame.
+                Scrub the preview to a frame, then drag the layer to edit its keyframe there.
               </small>
               <ul className="keyframe-list">
                 {selected.keyframes.map((kf, index) => (
-                  <li key={`${kf.t}-${index}`} className="keyframe-item">
-                    <span>
-                      t={Math.round(kf.t * 100)}% · x={kf.x?.toFixed(2)} · y={kf.y?.toFixed(2)} · α=
-                      {kf.opacity?.toFixed(2)}
-                    </span>
+                  <li key={kf.id ?? index} className="keyframe-item">
+                    <div className="keyframe-row-head">
+                      <span className="keyframe-index">#{index + 1}</span>
+                      <button
+                        type="button"
+                        className="btn btn-small keyframe-remove"
+                        onClick={() => kf.id && deleteKeyframe(selected, kf.id)}
+                        title="Remove this keyframe"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="keyframe-fields">
+                      <KeyframeField
+                        label="t %"
+                        value={kf.t * 100}
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        onChange={(next) => kf.id && patchKeyframe(selected, kf.id, { t: next / 100 })}
+                      />
+                      <KeyframeField
+                        label="x"
+                        value={kf.x ?? selected.x}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(next) => kf.id && patchKeyframe(selected, kf.id, { x: next })}
+                      />
+                      <KeyframeField
+                        label="y"
+                        value={kf.y ?? selected.y}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(next) => kf.id && patchKeyframe(selected, kf.id, { y: next })}
+                      />
+                      <KeyframeField
+                        label="α"
+                        value={kf.opacity ?? selected.opacity}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(next) =>
+                          kf.id && patchKeyframe(selected, kf.id, { opacity: next })
+                        }
+                      />
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -94,11 +94,41 @@ export const SHAPE_OPTIONS: { id: ShapeKind; label: string }[] = [
 
 /** Normalized timeline keyframe (t in 0–1 across media duration / loop). */
 export interface LayerKeyframe {
+  /** Stable identity so rows keep focus while `t` is edited and the list re-sorts. */
+  id?: string;
   t: number;
   x?: number;
   y?: number;
   opacity?: number;
 }
+
+/** Procedural transform animations applied after keyframe sampling. */
+export type LayerEffectKind = 'jitter' | 'bob' | 'pulse' | 'spin' | 'shake' | 'blink';
+
+export interface LayerEffect {
+  id: string;
+  kind: LayerEffectKind;
+  enabled: boolean;
+  /** 0–1 strength. */
+  intensity: number;
+  /** Relative speed multiplier (typical useful range ~0.25–4). */
+  speed: number;
+  /** 0–1 phase offset so stacked effects don't lock in sync. */
+  phase: number;
+}
+
+export const LAYER_EFFECT_OPTIONS: ReadonlyArray<{
+  id: LayerEffectKind;
+  label: string;
+  description: string;
+}> = [
+  { id: 'jitter', label: 'Jitter', description: 'Tiny random position noise' },
+  { id: 'bob', label: 'Bob', description: 'Smooth vertical sine motion' },
+  { id: 'pulse', label: 'Pulse', description: 'Scale pop in and out' },
+  { id: 'spin', label: 'Spin', description: 'Continuous rotation' },
+  { id: 'shake', label: 'Shake', description: 'Horizontal vibration' },
+  { id: 'blink', label: 'Blink', description: 'Opacity flicker' },
+];
 
 export interface TextLayer {
   id: string;
@@ -130,6 +160,7 @@ export interface TextLayer {
   /** Runtime-only decoded image for stickers. */
   imageElement?: HTMLImageElement;
   keyframes: LayerKeyframe[];
+  effects: LayerEffect[];
 }
 
 export interface GifFrame {
@@ -236,6 +267,7 @@ export function createTextLayer(partial: Partial<TextLayer> = {}): TextLayer {
     opacity: 1,
     locked: false,
     keyframes: [],
+    effects: [],
     ...partial,
   };
 }
@@ -258,9 +290,40 @@ export function normalizeCrtSettings(input: Partial<CrtSettings> | null | undefi
   return { ...defaultCrtSettings, ...(input ?? {}) };
 }
 
+export function normalizeLayerEffect(input: Partial<LayerEffect> & { kind: LayerEffectKind }): LayerEffect {
+  return {
+    id: input.id ?? crypto.randomUUID(),
+    kind: input.kind,
+    enabled: input.enabled ?? true,
+    intensity: Math.min(1, Math.max(0, input.intensity ?? 0.5)),
+    speed: Math.min(8, Math.max(0.05, input.speed ?? 1)),
+    phase: Math.min(1, Math.max(0, input.phase ?? 0)),
+  };
+}
+
+export function createLayerEffect(kind: LayerEffectKind, partial: Partial<LayerEffect> = {}): LayerEffect {
+  const defaults: Record<LayerEffectKind, Pick<LayerEffect, 'intensity' | 'speed' | 'phase'>> = {
+    jitter: { intensity: 0.35, speed: 1.5, phase: 0 },
+    bob: { intensity: 0.4, speed: 1, phase: 0 },
+    pulse: { intensity: 0.35, speed: 1.2, phase: 0 },
+    spin: { intensity: 0.5, speed: 0.75, phase: 0 },
+    shake: { intensity: 0.45, speed: 2.2, phase: 0 },
+    blink: { intensity: 0.7, speed: 1.8, phase: 0 },
+  };
+  return normalizeLayerEffect({ kind, ...defaults[kind], ...partial });
+}
+
 export function normalizeTextLayer(input: Partial<TextLayer> & { id?: string }): TextLayer {
   const base = createTextLayer({ id: input.id ?? crypto.randomUUID() });
-  const merged = { ...base, ...input, keyframes: input.keyframes ?? [] };
+  const keyframes = (input.keyframes ?? [])
+    .map((frame) => ({ ...frame, id: frame.id ?? crypto.randomUUID() }))
+    .sort((a, b) => a.t - b.t);
+  const effects = (input.effects ?? [])
+    .filter((effect) => Boolean(effect?.kind))
+    .map((effect) =>
+      normalizeLayerEffect(effect as Partial<LayerEffect> & { kind: LayerEffectKind }),
+    );
+  const merged = { ...base, ...input, keyframes, effects };
   if (!merged.kind) merged.kind = merged.imageUrl ? 'image' : merged.shape ? 'shape' : 'text';
   return merged;
 }

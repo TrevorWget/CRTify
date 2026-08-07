@@ -40,6 +40,7 @@ export default function App() {
   const [textLayers, setTextLayers] = useState<TextLayer[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [crtAffectText, setCrtAffectText] = useState(false);
+  const [videoTime, setVideoTime] = useState(0);
   const historyRef = useRef<EditorSnapshot[]>([]);
   const redoRef = useRef<EditorSnapshot[]>([]);
   const [historyCount, setHistoryCount] = useState(0);
@@ -398,7 +399,7 @@ export default function App() {
             <span className="module-label">02 / TYPE DECK</span>
             <TextOverlayEditor
               layers={textLayers}
-              timeline={getTimelinePosition(media, gifFrameIndex)}
+              timeline={getTimelinePosition(media, gifFrameIndex, videoTime)}
               selectedLayerId={selectedLayerId}
               onSelectLayer={setSelectedLayerId}
               onUpdateLayer={handleUpdateLayer}
@@ -430,6 +431,7 @@ export default function App() {
             isPlaying={isPlaying}
             onTogglePlay={() => setIsPlaying((p) => !p)}
             onGifFrameChange={setGifFrameIndex}
+            onVideoTimeChange={setVideoTime}
           />
             <div className="faceplate-footer" aria-hidden="true">
               <span>◉ POWER</span>

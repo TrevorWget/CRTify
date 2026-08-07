@@ -27,7 +27,6 @@ import { CrtRenderer } from '../utils/webgl';
 import { drawTextLayers } from '../utils/textCompositor';
 import { imageDataToCanvas } from '../utils/mediaLoader';
 import { isFrameSequenceMedia } from '../utils/animationMedia';
-import { resolveLayersAtTime } from '../utils/keyframes';
 
 interface ExportOptions {
   media: LoadedMedia;
@@ -169,11 +168,10 @@ export function useExporter() {
               : media.gifFrames && media.gifFrames.length > 1
                 ? gifFrameIndex / (media.gifFrames.length - 1)
                 : 0;
-          const layers = resolveLayersAtTime(textLayers, timeline);
           const crtCanvas = renderer.renderFrame(source, settings, 0, {
             preserveAlpha: format === 'png' || format === 'webp',
           });
-          drawTextLayers(crtCanvas, layers, settings, crtAffectText, null, timeline);
+          drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
           let output = scaleCanvas(crtCanvas, scale);
           if (settings.showBezel) output = applyBezelChrome(output);
           downloadBlob(

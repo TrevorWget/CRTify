@@ -1,7 +1,6 @@
 import { encodeAnimation } from 'wasm-webp';
 import type { CrtSettings, ExportProgress, GifFrame, TextLayer } from '../types/crt';
 import { applyBezelChrome } from './bezelOverlay';
-import { resolveLayersAtTime } from './keyframes';
 import { CrtRenderer } from './webgl';
 import { drawTextLayers } from './textCompositor';
 import { percentToScale } from './imageExport';
@@ -84,11 +83,10 @@ export async function exportAnimatedWebp(
 
       const time = i * 0.1;
       const timeline = frames.length <= 1 ? 0 : i / (frames.length - 1);
-      const layers = resolveLayersAtTime(textLayers, timeline);
       const crtCanvas = renderer.renderFrame(frameCanvas, settings, time, {
         preserveAlpha: true,
       });
-      drawTextLayers(crtCanvas, layers, settings, crtAffectText, null, timeline);
+      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
       let output: HTMLCanvasElement = crtCanvas;
       if (settings.showBezel) output = applyBezelChrome(output);
 

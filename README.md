@@ -8,6 +8,7 @@ Browser-based CRT monitor overlay editor. Upload an image, GIF, animated WebP, o
 - **Look presets**: VHS, Arcade, Amber, Broadcast, Security, plus custom presets saved in localStorage; shareable look URL hash (`#look=…`)
 - **Overlays**: text (multiline, custom fonts), shapes, and stickers — with glow, blur, brightness, stroke, warp, skew, and CRT-aware distortion
 - **Keyframes**: animate overlay opacity and position across a GIF/WebP/video timeline
+- **Anim FX**: procedural transform effects on overlays (jitter, bob, pulse, spin, shake, blink)
 - **Media**: PNG/JPEG/WebP, animated GIF/WebP, MP4/WebM; clipboard paste, webcam capture, batch stills
 - **Projects**: save/load `.crtify.json` (reattach media after load)
 - **Export**: PNG, JPEG, WebP (still or animated), GIF, MP4, WebM — including cross-format export and optional keep-audio remux for video
