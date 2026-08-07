@@ -631,6 +631,10 @@ button.control-divider-toggle:focus-visible {
   overflow-y: auto;
 }
 
+.export-menu > * {
+  flex-shrink: 0;
+}
+
 .export-menu input[type='range'] {
   width: 100%;
   accent-color: var(--accent);
@@ -663,15 +667,28 @@ button.control-divider-toggle:focus-visible {
 }
 
 .export-toggle {
-  flex-direction: row;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: center;
   gap: 0.75rem;
   min-height: 0;
 }
 
 .export-toggle > span {
   flex: 1;
+  min-width: 0;
+}
+
+.export-toggle > span small {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.export-toggle input[type='checkbox'] {
+  flex-shrink: 0;
+}
+
+.export-toggle > span {
   min-width: 0;
 }
 
@@ -1434,6 +1451,10 @@ label:focus-within {
   padding: 0.45rem 0.5rem;
   border: 1px solid #4b3925;
   background: #0d0a08;
+}
+
+.export-toggle {
+  min-height: 54px;
 }
 
 .toggle-row input[type='checkbox'],
