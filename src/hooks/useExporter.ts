@@ -15,10 +15,12 @@ import {
   withExportExtension,
 } from '../utils/imageExport';
 import { exportGif } from '../utils/gifPipeline';
+import { exportAnimatedWebp } from '../utils/webpPipeline';
 import { exportVideo, exportVideoViaMediaRecorder } from '../utils/videoPipeline';
 import { CrtRenderer } from '../utils/webgl';
 import { drawTextLayers } from '../utils/textCompositor';
 import { imageDataToCanvas } from '../utils/mediaLoader';
+import { isFrameSequenceMedia } from '../utils/animationMedia';
 
 interface ExportOptions {
   media: LoadedMedia;
@@ -52,13 +54,27 @@ export function useExporter() {
         const filename = withExportExtension(exportConfig.filename, format);
         const scale = percentToScale(exportConfig.scalePercent);
 
-        if (format === 'png' || format === 'jpeg' || format === 'webp') {
+        if (format === 'webp' && isFrameSequenceMedia(media) && media.gifFrames) {
+          const blob = await exportAnimatedWebp(
+            media.gifFrames,
+            settings,
+            textLayers,
+            crtAffectText,
+            setProgress,
+            {
+              scalePercent: exportConfig.scalePercent,
+              imageQuality: exportConfig.imageQuality,
+              frameSkip: exportConfig.frameSkip,
+            },
+          );
+          downloadBlob(blob, filename);
+        } else if (format === 'png' || format === 'jpeg' || format === 'webp') {
           const renderer = new CrtRenderer();
           let source: CanvasImageSource | null = null;
 
           if (media.type === 'image' && media.image) {
             source = media.image;
-          } else if (media.type === 'gif' && media.gifFrames) {
+          } else if (isFrameSequenceMedia(media) && media.gifFrames) {
             const frame = media.gifFrames[gifFrameIndex % media.gifFrames.length];
             source = imageDataToCanvas(frame.imageData);
           } else if (media.type === 'video' && media.video) {
@@ -80,7 +96,7 @@ export function useExporter() {
           downloadBlob(blob, filename);
           renderer.destroy();
         } else if (format === 'gif') {
-          if (!media.gifFrames) throw new Error('No GIF frames to export');
+          if (!media.gifFrames) throw new Error('No animation frames to export');
           const blob = await exportGif(
             media.gifFrames,
             settings,

@@ -6,6 +6,7 @@ import {
   type ExportProgress,
   type LoadedMedia,
 } from '../types/crt';
+import { isFrameSequenceMedia } from '../utils/animationMedia';
 import { defaultExportFilename, supportsWebpExport } from '../utils/imageExport';
 
 interface ExportPanelProps {
@@ -40,16 +41,17 @@ export function ExportPanel({
   const [optimizeVideo, setOptimizeVideo] = useState(false);
 
   const webpSupported = useMemo(() => supportsWebpExport(), []);
+  const animatedSource = isFrameSequenceMedia(media);
 
   const availableFormats = useMemo(() => {
     const formats: ExportFormat[] = [];
     if (!media) return formats;
     formats.push('png', 'jpeg');
     if (webpSupported) formats.push('webp');
-    if (media.type === 'gif') formats.push('gif');
+    if (animatedSource) formats.push('gif');
     if (media.type === 'video') formats.push('mp4', 'webm');
     return formats;
-  }, [media, webpSupported]);
+  }, [media, webpSupported, animatedSource]);
 
   useEffect(() => {
     setFilename(defaultName);
@@ -63,10 +65,17 @@ export function ExportPanel({
 
   const scaledWidth = media ? Math.max(1, Math.round(media.width * (scalePercent / 100))) : 0;
   const scaledHeight = media ? Math.max(1, Math.round(media.height * (scalePercent / 100))) : 0;
-  const showFrameSkip = format === 'gif' || format === 'mp4' || format === 'webm';
+  const animatedWebpExport = format === 'webp' && animatedSource;
+  const showFrameSkip =
+    format === 'gif' || format === 'mp4' || format === 'webm' || animatedWebpExport;
   const showImageQuality = format === 'jpeg' || format === 'webp';
   const showGifControls = format === 'gif';
   const showVideoOptimize = format === 'mp4' || format === 'webm';
+
+  const formatLabel = (item: ExportFormat) => {
+    if (item === 'webp' && animatedSource) return 'WEBP (anim)';
+    return item.toUpperCase();
+  };
 
   const applyCompactPreset = () => {
     setScalePercent(50);
@@ -120,10 +129,13 @@ export function ExportPanel({
                   className={format === item ? 'active' : ''}
                   onClick={() => setFormat(item)}
                 >
-                  {item.toUpperCase()}
+                  {formatLabel(item)}
                 </button>
               ))}
             </div>
+            {animatedWebpExport && (
+              <small>Exports the full animation as animated WebP.</small>
+            )}
           </div>
 
           <div className="export-field">
@@ -264,7 +276,7 @@ export function ExportPanel({
               setOpen(false);
             }}
           >
-            Download {format.toUpperCase()}
+            Download {formatLabel(format)}
           </button>
         </div>
       )}

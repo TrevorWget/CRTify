@@ -1,4 +1,4 @@
-export type MediaType = 'image' | 'gif' | 'video' | null;
+export type MediaType = 'image' | 'gif' | 'webp' | 'video' | null;
 
 export interface CrtSettings {
   curvature: number;

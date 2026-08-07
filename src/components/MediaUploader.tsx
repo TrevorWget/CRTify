@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import type { LoadedMedia } from '../types/crt';
+import { isFrameSequenceMedia } from '../utils/animationMedia';
 
 interface MediaUploaderProps {
   onFileSelect: (file: File) => void;
@@ -32,11 +33,13 @@ export function MediaUploader({ onFileSelect, loading, media, onClear }: MediaUp
       <h3>Media</h3>
       {media ? (
         <div className="media-info">
-          <p className="media-type">{media.type?.toUpperCase()}</p>
+          <p className="media-type">
+            {media.type === 'webp' ? 'WEBP (anim)' : media.type?.toUpperCase()}
+          </p>
           <p className="media-dims">
             {media.width} × {media.height}
           </p>
-          {media.type === 'gif' && media.gifFrames && (
+          {isFrameSequenceMedia(media) && media.gifFrames && (
             <p className="media-frames">{media.gifFrames.length} frames</p>
           )}
           <button type="button" className="btn btn-secondary" onClick={onClear}>
@@ -51,14 +54,14 @@ export function MediaUploader({ onFileSelect, loading, media, onClear }: MediaUp
         >
           <input
             type="file"
-            accept="image/*,video/*,.gif"
+            accept="image/*,video/*,.gif,.webp"
             onChange={handleChange}
             disabled={loading}
             hidden
           />
           <span className="drop-icon">⬆</span>
           <span>{loading ? 'Loading...' : 'Drop file or click to upload'}</span>
-          <span className="drop-hint">Images, WebP, GIFs, or videos</span>
+          <span className="drop-hint">Images, animated WebP, GIFs, or videos</span>
         </label>
       )}
     </div>
