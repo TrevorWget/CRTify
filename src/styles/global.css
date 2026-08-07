@@ -450,6 +450,54 @@ body {
   background: var(--orange);
 }
 
+button.control-divider-toggle {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.control-divider-toggle:hover .control-divider-label,
+button.control-divider-toggle:focus-visible .control-divider-label {
+  color: var(--cream);
+}
+
+button.control-divider-toggle:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+
+.control-divider-label {
+  flex: none;
+}
+
+.control-divider-chevron {
+  flex: none;
+  color: var(--accent);
+  font-size: 0.7rem;
+}
+
+.control-divider-toggle::after {
+  order: 1;
+}
+
+.control-divider-chevron {
+  order: 2;
+}
+
+.collapsible-section-body {
+  margin-bottom: 0.15rem;
+}
+
+.collapsible-section.is-collapsed .control-divider {
+  margin-bottom: 0.35rem;
+}
+
 .segmented-control,
 .position-buttons {
   display: flex;
@@ -1976,15 +2024,52 @@ label:focus-within {
 .effect-enable {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
   color: var(--accent-amber, #ffb000);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-size: 0.68rem;
+  cursor: pointer;
 }
 
-.effect-enable input {
+.effect-enable input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
   margin: 0;
+  flex: none;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 2px solid #70583b;
+  border-radius: 0;
+  background: #1b1611;
+  box-shadow: inset 0 0 5px #000;
+  cursor: pointer;
+  position: relative;
+}
+
+.effect-enable input[type='checkbox']::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: transparent;
+}
+
+.effect-enable input[type='checkbox']:checked {
+  border-color: var(--orange);
+  background: #4d160e;
+  box-shadow:
+    inset 0 0 5px #000,
+    0 0 8px rgba(242, 106, 22, 0.35);
+}
+
+.effect-enable input[type='checkbox']:checked::after {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--orange);
+}
+
+.effect-enable input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
 }
 
 .keyframe-field {
@@ -1997,6 +2082,11 @@ label:focus-within {
   font-size: 0.62rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.keyframe-field[title] span {
+  border-bottom: 1px dotted #8a7355;
+  cursor: help;
 }
 
 .keyframe-field input {
