@@ -667,6 +667,21 @@ button.control-divider-toggle:focus-visible {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
+  min-height: 0;
+}
+
+.export-toggle > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.export-toggle > span small {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.export-toggle input[type='checkbox'] {
+  flex-shrink: 0;
 }
 
 .export-toggle input[type='checkbox'] {
@@ -1415,7 +1430,7 @@ label:focus-within {
 
 .toggle-row,
 .export-toggle {
-  min-height: 38px;
+  min-height: 0;
   padding: 0.45rem 0.5rem;
   border: 1px solid #4b3925;
   background: #0d0a08;
@@ -2112,6 +2127,37 @@ label:focus-within {
 .transport-controls .btn {
   margin: 0;
   flex: none;
+}
+
+.audio-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.audio-controls .btn {
+  margin: 0;
+  flex: none;
+  min-width: 2.6rem;
+  padding-inline: 0.45rem;
+  font-size: 0.72rem;
+}
+
+.audio-level {
+  min-width: 2rem;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.control-hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: #9c8663;
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 .scrubber {

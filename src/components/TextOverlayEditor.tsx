@@ -38,6 +38,32 @@ const ANIM_FX_FIELD_HELP = {
   'Fade Out': 'Portion of the active window spent ramping the effect down to zero.',
 } as const;
 
+const TEXT_FX_FIELD_HELP: Partial<
+  Record<LayerEffectKind, Partial<Record<keyof typeof ANIM_FX_FIELD_HELP, string>>>
+> = {
+  typewriter: {
+    Amt: 'Reserved for future stagger tuning. Leave at 1 for a straight left-to-right reveal.',
+    Spd: 'How quickly characters appear within the Start–End window. Higher = faster reveal; completes once and holds.',
+    Phase: 'Delays when the reveal begins inside the Start–End window (0 = immediate, 1 = near the end).',
+    Start: 'Timeline position where the reveal begins (0% = start of the loop).',
+    End: 'Timeline position where every character is visible. The reveal does not loop again.',
+  },
+  scramble: {
+    Amt: 'How aggressively unrevealed characters shuffle (higher = more glyph changes while settling).',
+    Spd: 'How fast characters shuffle and settle within the Start–End window. Completes once and holds.',
+    Phase: 'Delays when scrambling begins inside the Start–End window.',
+    Start: 'Timeline position where scrambling begins.',
+    End: 'Timeline position where all characters show their final glyphs.',
+  },
+};
+
+function animFxHelp(
+  kind: LayerEffectKind,
+  field: keyof typeof ANIM_FX_FIELD_HELP,
+): string {
+  return TEXT_FX_FIELD_HELP[kind]?.[field] ?? ANIM_FX_FIELD_HELP[field];
+}
+
 interface TextOverlayEditorProps {
   layers: TextLayer[];
   /** Normalized playhead position, used so position edits target the active keyframe. */
@@ -349,17 +375,6 @@ export function TextOverlayEditor({
               </button>
               <button
                 type="button"
-                className="btn-icon"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateLayer(layer.id, { locked: !layer.locked });
-                }}
-                title={layer.locked ? 'Unlock' : 'Lock'}
-              >
-                {layer.locked ? '🔒' : '🔓'}
-              </button>
-              <button
-                type="button"
                 className="btn-icon btn-danger"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -466,12 +481,16 @@ export function TextOverlayEditor({
                       type="button"
                       className={selected.textAlign === alignment ? 'active' : ''}
                       onClick={() => onUpdateLayer(selected.id, { textAlign: alignment })}
-                      title={`Align ${alignment}`}
+                      title={`Align text ${alignment} relative to the layer anchor (Position X/Y)`}
                     >
                       <span>{alignment[0].toUpperCase()}</span>
                     </button>
                   ))}
                 </div>
+                <small className="control-hint">
+                  L/C/R aligns the text block around its anchor point. Position buttons only move the
+                  anchor — they do not change alignment.
+                </small>
               </div>
               <label className="control-row">
                 <span className="control-label">Size</span>
@@ -513,10 +532,7 @@ export function TextOverlayEditor({
                 type="button"
                 className="btn btn-small"
                 onClick={() =>
-                  onUpdateLayer(selected.id, {
-                    ...positionUpdate(selected, { x: 0.5 }, timeline),
-                    ...(selected.kind === 'text' ? { textAlign: 'center' as const } : {}),
-                  })
+                  onUpdateLayer(selected.id, positionUpdate(selected, { x: 0.5 }, timeline))
                 }
               >
                 Center X
@@ -534,10 +550,7 @@ export function TextOverlayEditor({
                 type="button"
                 className="btn btn-small"
                 onClick={() =>
-                  onUpdateLayer(selected.id, {
-                    ...positionUpdate(selected, { x: 0.5, y: 0.5 }, timeline),
-                    ...(selected.kind === 'text' ? { textAlign: 'center' as const } : {}),
-                  })
+                  onUpdateLayer(selected.id, positionUpdate(selected, { x: 0.5, y: 0.5 }, timeline))
                 }
               >
                 Center both
@@ -760,7 +773,7 @@ export function TextOverlayEditor({
                       <div className="keyframe-fields effect-fields">
                         <KeyframeField
                           label="Amt"
-                          help={ANIM_FX_FIELD_HELP.Amt}
+                          help={animFxHelp(effect.kind, 'Amt')}
                           value={effect.intensity}
                           min={0}
                           max={1}
@@ -771,7 +784,7 @@ export function TextOverlayEditor({
                         />
                         <KeyframeField
                           label="Spd"
-                          help={ANIM_FX_FIELD_HELP.Spd}
+                          help={animFxHelp(effect.kind, 'Spd')}
                           value={effect.speed}
                           min={0.05}
                           max={8}
@@ -780,7 +793,7 @@ export function TextOverlayEditor({
                         />
                         <KeyframeField
                           label="Phase"
-                          help={ANIM_FX_FIELD_HELP.Phase}
+                          help={animFxHelp(effect.kind, 'Phase')}
                           value={effect.phase}
                           min={0}
                           max={1}
@@ -791,7 +804,7 @@ export function TextOverlayEditor({
                       <div className="keyframe-fields effect-fields envelope-fields">
                         <KeyframeField
                           label="Start"
-                          help={ANIM_FX_FIELD_HELP.Start}
+                          help={animFxHelp(effect.kind, 'Start')}
                           value={effect.envelopeStart * 100}
                           min={0}
                           max={100}
@@ -802,7 +815,7 @@ export function TextOverlayEditor({
                         />
                         <KeyframeField
                           label="End"
-                          help={ANIM_FX_FIELD_HELP.End}
+                          help={animFxHelp(effect.kind, 'End')}
                           value={effect.envelopeEnd * 100}
                           min={0}
                           max={100}
