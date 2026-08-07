@@ -47,7 +47,7 @@ export function PresetRack({ settings, crtAffectText, onApply, onPresetsChanged 
               type="button"
               className={activeId === preset.id ? 'active' : ''}
               onClick={() => handleApply(preset)}
-              title={preset.name}
+              title={preset.description ?? `${preset.name} look preset`}
             >
               {preset.name}
             </button>
