@@ -50,7 +50,14 @@ export function MediaUploader({
 
   return (
     <div className="media-uploader">
-      <h3>Media</h3>
+      <div className="media-heading">
+        <h3>Media</h3>
+        {media?.fileName && (
+          <span className="media-filename" title={media.fileName}>
+            {media.fileName}
+          </span>
+        )}
+      </div>
       {media ? (
         <div className="media-info">
           <p className="media-type">

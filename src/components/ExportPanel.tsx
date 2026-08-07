@@ -7,6 +7,7 @@ import {
   type LoadedMedia,
 } from '../types/crt';
 import { isFrameSequenceMedia } from '../utils/animationMedia';
+import { preferredExportFormat } from '../utils/exportDefaults';
 import { defaultExportFilename, supportsWebpExport } from '../utils/imageExport';
 
 interface ExportPanelProps {
@@ -59,10 +60,25 @@ export function ExportPanel({
   }, [defaultName]);
 
   useEffect(() => {
+    if (!media || availableFormats.length === 0) return;
+    const preferred = preferredExportFormat(media);
+    setFormat(availableFormats.includes(preferred) ? preferred : availableFormats[0]);
+  }, [media, availableFormats]);
+
+  useEffect(() => {
     if (!availableFormats.includes(format) && availableFormats.length > 0) {
       setFormat(availableFormats[0]);
     }
   }, [availableFormats, format]);
+
+  const handleOpenExport = () => {
+    if (!media || exporting) return;
+    if (!open) {
+      const preferred = preferredExportFormat(media);
+      if (availableFormats.includes(preferred)) setFormat(preferred);
+    }
+    setOpen(!open);
+  };
 
   const scaledWidth = media ? Math.max(1, Math.round(media.width * (scalePercent / 100))) : 0;
   const scaledHeight = media ? Math.max(1, Math.round(media.height * (scalePercent / 100))) : 0;
@@ -105,7 +121,7 @@ export function ExportPanel({
         type="button"
         className="btn btn-primary export-btn"
         disabled={!media || exporting}
-        onClick={() => setOpen(!open)}
+        onClick={handleOpenExport}
       >
         {exporting ? 'Exporting...' : 'Export ▼'}
       </button>

@@ -1,11 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
 import {
   BUILTIN_FONTS,
+  SHAPE_OPTIONS,
   defaultCrtSettings,
   type FontFamily,
   type LayerKeyframe,
   type OverlayLayerKind,
-  type ShapeKind,
   type TextLayer,
 } from '../types/crt';
 
@@ -46,7 +46,10 @@ const KIND_LABELS: Record<OverlayLayerKind, string> = {
 function layerDisplayName(layer: TextLayer): string {
   const prefix = `[${KIND_LABELS[layer.kind]}] `;
   if (layer.kind === 'text') return prefix + (layer.text.split('\n')[0] || '(empty)');
-  if (layer.kind === 'shape') return prefix + (layer.shape ?? 'rect');
+  if (layer.kind === 'shape') {
+    const label = SHAPE_OPTIONS.find((option) => option.id === layer.shape)?.label ?? layer.shape ?? 'Shape';
+    return prefix + label;
+  }
   return prefix + (layer.text || 'Sticker');
 }
 
@@ -264,15 +267,16 @@ export function TextOverlayEditor({
           {selected.kind === 'shape' && (
             <div className="control-row">
               <span className="control-label">Shape</span>
-              <div className="segmented-control">
-                {(['rect', 'ellipse'] as ShapeKind[]).map((shape) => (
+              <div className="segmented-control wrap shape-picker">
+                {SHAPE_OPTIONS.map((option) => (
                   <button
-                    key={shape}
+                    key={option.id}
                     type="button"
-                    className={selected.shape === shape ? 'active' : ''}
-                    onClick={() => onUpdateLayer(selected.id, { shape })}
+                    className={selected.shape === option.id ? 'active' : ''}
+                    onClick={() => onUpdateLayer(selected.id, { shape: option.id })}
+                    title={option.label}
                   >
-                    {shape}
+                    {option.label}
                   </button>
                 ))}
               </div>
@@ -450,113 +454,74 @@ export function TextOverlayEditor({
             onChange={(opacity) => onUpdateLayer(selected.id, { opacity })}
           />
 
-          {selected.kind === 'text' && (
-            <>
-              <div className="control-divider">DISTORTION</div>
-              <LayerSlider
-                label="Warp"
-                value={selected.warp}
-                min={0}
-                max={1}
-                step={0.01}
-                defaultValue={TEXT_EFFECT_DEFAULTS.warp}
-                onChange={(warp) => onUpdateLayer(selected.id, { warp })}
-              />
-              <LayerSlider
-                label="Skew"
-                value={selected.skew}
-                min={-45}
-                max={45}
-                step={1}
-                defaultValue={TEXT_EFFECT_DEFAULTS.skew}
-                onChange={(skew) => onUpdateLayer(selected.id, { skew })}
-              />
+          <div className="control-divider">DISTORTION</div>
+          <LayerSlider
+            label="Warp"
+            value={selected.warp}
+            min={0}
+            max={1}
+            step={0.01}
+            defaultValue={selected.kind === 'text' ? TEXT_EFFECT_DEFAULTS.warp : 0}
+            onChange={(warp) => onUpdateLayer(selected.id, { warp })}
+          />
+          <LayerSlider
+            label="Skew"
+            value={selected.skew}
+            min={-45}
+            max={45}
+            step={1}
+            defaultValue={TEXT_EFFECT_DEFAULTS.skew}
+            onChange={(skew) => onUpdateLayer(selected.id, { skew })}
+          />
 
-              <div className="control-divider">SIGNAL / GLOW</div>
-              <LayerSlider
-                label="Glow"
-                value={selected.glow}
-                min={0}
-                max={50}
-                step={1}
-                defaultValue={TEXT_EFFECT_DEFAULTS.glow}
-                onChange={(glow) => onUpdateLayer(selected.id, { glow })}
+          <div className="control-divider">SIGNAL / GLOW</div>
+          <LayerSlider
+            label="Glow"
+            value={selected.glow}
+            min={0}
+            max={50}
+            step={1}
+            defaultValue={selected.kind === 'text' ? TEXT_EFFECT_DEFAULTS.glow : 0}
+            onChange={(glow) => onUpdateLayer(selected.id, { glow })}
+          />
+          <LayerSlider
+            label="Soft blur"
+            value={selected.blur}
+            min={0}
+            max={8}
+            step={0.1}
+            defaultValue={TEXT_EFFECT_DEFAULTS.blur}
+            onChange={(blur) => onUpdateLayer(selected.id, { blur })}
+          />
+          <LayerSlider
+            label="Brightness"
+            value={selected.brightness}
+            min={0.25}
+            max={3}
+            step={0.01}
+            defaultValue={TEXT_EFFECT_DEFAULTS.brightness}
+            onChange={(brightness) => onUpdateLayer(selected.id, { brightness })}
+          />
+          <LayerSlider
+            label="Stroke"
+            value={selected.strokeWidth}
+            min={0}
+            max={12}
+            step={0.5}
+            defaultValue={TEXT_EFFECT_DEFAULTS.strokeWidth}
+            onChange={(strokeWidth) => onUpdateLayer(selected.id, { strokeWidth })}
+          />
+          {selected.strokeWidth > 0 && (
+            <label className="control-row">
+              <span className="control-label">Stroke color</span>
+              <input
+                type="color"
+                value={selected.strokeColor}
+                onChange={(event) =>
+                  onUpdateLayer(selected.id, { strokeColor: event.target.value })
+                }
               />
-              <LayerSlider
-                label="Soft blur"
-                value={selected.blur}
-                min={0}
-                max={8}
-                step={0.1}
-                defaultValue={TEXT_EFFECT_DEFAULTS.blur}
-                onChange={(blur) => onUpdateLayer(selected.id, { blur })}
-              />
-              <LayerSlider
-                label="Brightness"
-                value={selected.brightness}
-                min={0.25}
-                max={3}
-                step={0.01}
-                defaultValue={TEXT_EFFECT_DEFAULTS.brightness}
-                onChange={(brightness) => onUpdateLayer(selected.id, { brightness })}
-              />
-              <LayerSlider
-                label="Stroke"
-                value={selected.strokeWidth}
-                min={0}
-                max={12}
-                step={0.5}
-                defaultValue={TEXT_EFFECT_DEFAULTS.strokeWidth}
-                onChange={(strokeWidth) => onUpdateLayer(selected.id, { strokeWidth })}
-              />
-              {selected.strokeWidth > 0 && (
-                <label className="control-row">
-                  <span className="control-label">Stroke color</span>
-                  <input
-                    type="color"
-                    value={selected.strokeColor}
-                    onChange={(event) =>
-                      onUpdateLayer(selected.id, { strokeColor: event.target.value })
-                    }
-                  />
-                </label>
-              )}
-            </>
-          )}
-
-          {(selected.kind === 'shape' || selected.kind === 'image') && selected.strokeWidth >= 0 && (
-            <>
-              <LayerSlider
-                label="Stroke"
-                value={selected.strokeWidth}
-                min={0}
-                max={12}
-                step={0.5}
-                defaultValue={TEXT_EFFECT_DEFAULTS.strokeWidth}
-                onChange={(strokeWidth) => onUpdateLayer(selected.id, { strokeWidth })}
-              />
-              {selected.strokeWidth > 0 && (
-                <label className="control-row">
-                  <span className="control-label">Stroke color</span>
-                  <input
-                    type="color"
-                    value={selected.strokeColor}
-                    onChange={(event) =>
-                      onUpdateLayer(selected.id, { strokeColor: event.target.value })
-                    }
-                  />
-                </label>
-              )}
-              <LayerSlider
-                label="Glow"
-                value={selected.glow}
-                min={0}
-                max={50}
-                step={1}
-                defaultValue={0}
-                onChange={(glow) => onUpdateLayer(selected.id, { glow })}
-              />
-            </>
+            </label>
           )}
 
           <div className="control-divider">KEYFRAMES</div>
