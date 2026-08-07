@@ -1,11 +1,18 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL } from '@ffmpeg/util';
-import type { CrtSettings, ExportProgress, ExportSizeMode, TextLayer } from '../types/crt';
+import type { CrtSettings, ExportProgress, TextLayer } from '../types/crt';
 import { CrtRenderer } from './webgl';
 import { drawTextLayers } from './textCompositor';
-import { getExportScale, getVideoBitrate, getVideoCrf } from './imageExport';
+import { getVideoBitrate, getVideoCrf, percentToScale } from './imageExport';
+import { MAX_VIDEO_EXPORT_FRAMES } from './mediaLoader';
 
 let ffmpegInstance: FFmpeg | null = null;
+
+export interface VideoExportSettings {
+  scalePercent: number;
+  frameSkip: number;
+  optimizeVideo: boolean;
+}
 
 async function getFFmpeg(): Promise<FFmpeg> {
   if (ffmpegInstance) return ffmpegInstance;
@@ -27,16 +34,17 @@ export async function exportVideo(
   crtAffectText: boolean,
   format: 'mp4' | 'webm',
   onProgress: (progress: ExportProgress) => void,
-  sizeMode: ExportSizeMode = 'original',
-  optimize = false,
+  exportSettings: VideoExportSettings,
 ): Promise<Blob> {
   const renderer = new CrtRenderer();
-  const scale = getExportScale(sizeMode);
+  const scale = percentToScale(exportSettings.scalePercent);
   const width = Math.max(2, Math.round(video.videoWidth * scale) & ~1);
   const height = Math.max(2, Math.round(video.videoHeight * scale) & ~1);
   const duration = video.duration;
-  const fps = optimize ? 24 : 30;
-  const totalFrames = Math.min(Math.ceil(duration * fps), 900);
+  const baseFps = exportSettings.optimizeVideo ? 24 : 30;
+  const frameSkip = Math.max(1, Math.round(exportSettings.frameSkip));
+  const fps = Math.max(1, baseFps / frameSkip);
+  const totalFrames = Math.min(Math.ceil(duration * fps), MAX_VIDEO_EXPORT_FRAMES);
   const scaledCanvas = document.createElement('canvas');
   scaledCanvas.width = width;
   scaledCanvas.height = height;
@@ -47,7 +55,7 @@ export async function exportVideo(
   const ffmpeg = await getFFmpeg();
   const ext = format === 'mp4' ? 'mp4' : 'webm';
   const mimeType = format === 'mp4' ? 'video/mp4' : 'video/webm';
-  const crf = getVideoCrf(optimize);
+  const crf = getVideoCrf(exportSettings.optimizeVideo);
 
   video.currentTime = 0;
   await video.play();
@@ -83,7 +91,7 @@ export async function exportVideo(
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
         '-crf', String(crf),
-        '-preset', optimize ? 'veryfast' : 'medium',
+        '-preset', exportSettings.optimizeVideo ? 'veryfast' : 'medium',
         '-y', 'output.mp4',
       ]);
     } else {
@@ -145,26 +153,26 @@ export async function exportVideoViaMediaRecorder(
   textLayers: TextLayer[],
   crtAffectText: boolean,
   onProgress: (progress: ExportProgress) => void,
-  sizeMode: ExportSizeMode = 'original',
-  optimize = false,
+  exportSettings: VideoExportSettings,
 ): Promise<Blob> {
   const renderer = new CrtRenderer();
-  const scale = getExportScale(sizeMode);
+  const scale = percentToScale(exportSettings.scalePercent);
   const width = Math.max(2, Math.round(video.videoWidth * scale) & ~1);
   const height = Math.max(2, Math.round(video.videoHeight * scale) & ~1);
+  const fps = Math.max(1, (exportSettings.optimizeVideo ? 24 : 30) / Math.max(1, exportSettings.frameSkip));
 
   const outputCanvas = document.createElement('canvas');
   outputCanvas.width = width;
   outputCanvas.height = height;
 
-  const stream = outputCanvas.captureStream(optimize ? 24 : 30);
+  const stream = outputCanvas.captureStream(fps);
   const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
     ? 'video/webm;codecs=vp9'
     : 'video/webm';
 
   const recorder = new MediaRecorder(stream, {
     mimeType,
-    videoBitsPerSecond: getVideoBitrate(optimize, sizeMode),
+    videoBitsPerSecond: getVideoBitrate(exportSettings.optimizeVideo, exportSettings.scalePercent),
   });
   const chunks: Blob[] = [];
 

@@ -1,9 +1,9 @@
 import GIF from 'gif.js';
-import type { CrtSettings, ExportProgress, ExportSizeMode, GifFrame, TextLayer } from '../types/crt';
+import type { CrtSettings, ExportProgress, GifFrame, TextLayer } from '../types/crt';
 import { CrtRenderer } from './webgl';
 import { drawTextLayers } from './textCompositor';
 import { imageDataToCanvas } from './mediaLoader';
-import { getExportScale, getGifQuality } from './imageExport';
+import { percentToScale } from './imageExport';
 
 const frameCanvas = document.createElement('canvas');
 const frameCtx = frameCanvas.getContext('2d')!;
@@ -22,6 +22,13 @@ const KEY_B = 0;
 const GIF_TRANSPARENT_COLOR = (KEY_R << 16) | (KEY_G << 8) | KEY_B;
 const GUARD_BAND = 100;
 const ALPHA_CUTOFF = 128;
+
+export interface GifExportSettings {
+  scalePercent: number;
+  gifQuality: number;
+  frameSkip: number;
+  dither: boolean;
+}
 
 function sourceHasTransparency(frames: GifFrame[]): boolean {
   for (const frame of frames) {
@@ -58,15 +65,16 @@ export async function exportGif(
   textLayers: TextLayer[],
   crtAffectText: boolean,
   onProgress: (progress: ExportProgress) => void,
-  sizeMode: ExportSizeMode = 'original',
-  optimize = false,
+  exportSettings: GifExportSettings,
 ): Promise<Blob> {
   const renderer = new CrtRenderer();
   const sourceWidth = frames[0].imageData.width;
   const sourceHeight = frames[0].imageData.height;
-  const scale = getExportScale(sizeMode);
+  const scale = percentToScale(exportSettings.scalePercent);
   const width = Math.max(1, Math.round(sourceWidth * scale));
   const height = Math.max(1, Math.round(sourceHeight * scale));
+  const frameSkip = Math.max(1, Math.round(exportSettings.frameSkip));
+  const quality = Math.min(30, Math.max(1, Math.round(exportSettings.gifQuality)));
 
   frameCanvas.width = sourceWidth;
   frameCanvas.height = sourceHeight;
@@ -74,14 +82,21 @@ export async function exportGif(
   encodeCanvas.height = height;
 
   const usesTransparency = settings.curvature > 0 || sourceHasTransparency(frames);
+  const selectedIndexes: number[] = [];
+  for (let i = 0; i < frames.length; i += frameSkip) {
+    selectedIndexes.push(i);
+  }
+  if (selectedIndexes[selectedIndexes.length - 1] !== frames.length - 1) {
+    selectedIndexes.push(frames.length - 1);
+  }
 
   return new Promise((resolve, reject) => {
     const gif = new GIF({
       workers: 2,
-      quality: getGifQuality(optimize, usesTransparency),
+      quality,
       width,
       height,
-      dither: false,
+      dither: exportSettings.dither ? 'FloydSteinberg' : false,
       // gif.js expects a numeric RGB value at runtime; its community typings
       // incorrectly declare this option as a string.
       transparent: usesTransparency ? (GIF_TRANSPARENT_COLOR as unknown as string) : null,
@@ -99,10 +114,17 @@ export async function exportGif(
 
     (async () => {
       try {
-        for (let i = 0; i < frames.length; i++) {
+        for (let step = 0; step < selectedIndexes.length; step++) {
+          const i = selectedIndexes[step];
+          const next = selectedIndexes[step + 1] ?? frames.length;
+          let delay = 0;
+          for (let d = i; d < next; d++) {
+            delay += frames[d].delay;
+          }
+
           onProgress({
-            stage: `Processing frame ${i + 1}/${frames.length}`,
-            progress: (i / frames.length) * 0.5,
+            stage: `Processing frame ${step + 1}/${selectedIndexes.length}`,
+            progress: (step / selectedIndexes.length) * 0.5,
           });
 
           frameCtx.clearRect(0, 0, sourceWidth, sourceHeight);
@@ -127,7 +149,7 @@ export async function exportGif(
 
           // GIFEncoder forces dispose=2 whenever a transparent color is set,
           // which is what keeps previous frames from bleeding through.
-          gif.addFrame(encodeCanvas, { copy: true, delay: frames[i].delay });
+          gif.addFrame(encodeCanvas, { copy: true, delay });
         }
         gif.render();
       } catch (err) {

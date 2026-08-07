@@ -83,21 +83,32 @@ export interface LoadedMedia {
   objectUrl?: string;
 }
 
-export type ExportFormat = 'png' | 'jpeg' | 'gif' | 'mp4' | 'webm';
-
-export type ExportSizeMode = 'original' | 'medium' | 'small';
+export type ExportFormat = 'png' | 'jpeg' | 'webp' | 'gif' | 'mp4' | 'webm';
 
 export interface ExportOptionsConfig {
   filename: string;
-  sizeMode: ExportSizeMode;
-  optimize: boolean;
+  /** Exact output scale as a percentage of source resolution (10–100). */
+  scalePercent: number;
+  /** JPEG/WebP quality from 0.5–1. */
+  imageQuality: number;
+  /** gif.js sample interval; lower is better color, larger files (1–30). */
+  gifQuality: number;
+  /** Keep every Nth frame when exporting GIF/video (1 = all frames). */
+  frameSkip: number;
+  /** Optional GIF dithering for smoother gradients at a size cost. */
+  dither: boolean;
+  /** Prefer smaller video encodes (lower bitrate / higher CRF / fewer fps). */
+  optimizeVideo: boolean;
 }
 
-export const EXPORT_SIZE_SCALES: Record<ExportSizeMode, number> = {
-  original: 1,
-  medium: 0.75,
-  small: 0.5,
-};
+export const defaultExportOptions = (): Omit<ExportOptionsConfig, 'filename'> => ({
+  scalePercent: 100,
+  imageQuality: 0.92,
+  gifQuality: 10,
+  frameSkip: 1,
+  dither: false,
+  optimizeVideo: false,
+});
 
 export interface ExportProgress {
   stage: string;

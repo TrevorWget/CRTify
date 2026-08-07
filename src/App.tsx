@@ -225,22 +225,26 @@ export default function App() {
 
       <main className="app-main">
         <aside className="sidebar sidebar-left">
-          <MediaUploader
-            onFileSelect={loadFile}
-            loading={loading}
-            media={media}
-            onClear={clearMedia}
-          />
-          <TextOverlayEditor
-            layers={textLayers}
-            selectedLayerId={selectedLayerId}
-            onSelectLayer={setSelectedLayerId}
-            onUpdateLayer={handleUpdateLayer}
-            onAddLayer={handleAddLayer}
-            onDeleteLayer={handleDeleteLayer}
-            onMoveLayer={handleMoveLayer}
-            onResetLayer={handleResetLayer}
-          />
+          <div className="sidebar-section sidebar-section-fixed">
+            <MediaUploader
+              onFileSelect={loadFile}
+              loading={loading}
+              media={media}
+              onClear={clearMedia}
+            />
+          </div>
+          <div className="sidebar-section sidebar-section-scroll">
+            <TextOverlayEditor
+              layers={textLayers}
+              selectedLayerId={selectedLayerId}
+              onSelectLayer={setSelectedLayerId}
+              onUpdateLayer={handleUpdateLayer}
+              onAddLayer={handleAddLayer}
+              onDeleteLayer={handleDeleteLayer}
+              onMoveLayer={handleMoveLayer}
+              onResetLayer={handleResetLayer}
+            />
+          </div>
         </aside>
 
         <section className="preview-section">
@@ -260,13 +264,15 @@ export default function App() {
         </section>
 
         <aside className="sidebar sidebar-right">
-          <EffectControls
-            settings={settings}
-            onChange={handleSettingsChange}
-            onReset={() => handleSettingsChange({ ...defaultCrtSettings })}
-            crtAffectText={crtAffectText}
-            onCrtAffectTextChange={handleCrtAffectTextChange}
-          />
+          <div className="sidebar-section sidebar-section-scroll">
+            <EffectControls
+              settings={settings}
+              onChange={handleSettingsChange}
+              onReset={() => handleSettingsChange({ ...defaultCrtSettings })}
+              crtAffectText={crtAffectText}
+              onCrtAffectTextChange={handleCrtAffectTextChange}
+            />
+          </div>
         </aside>
       </main>
 
@@ -281,8 +287,8 @@ export default function App() {
 
       <footer className="app-footer">
         <p>
-          Max resolution 1920px · GIFs up to 1200 frames within memory limits · Video export may
-          take a while
+          Max resolution 4096px · GIFs up to 1200 frames / 1 GB decode · Video export up to ~3 min
+          at 30fps (browser memory dependent)
         </p>
       </footer>
     </div>

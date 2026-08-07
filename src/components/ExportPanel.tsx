@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import type {
-  ExportFormat,
-  ExportOptionsConfig,
-  ExportProgress,
-  ExportSizeMode,
-  LoadedMedia,
+import {
+  defaultExportOptions,
+  type ExportFormat,
+  type ExportOptionsConfig,
+  type ExportProgress,
+  type LoadedMedia,
 } from '../types/crt';
-import { defaultExportFilename } from '../utils/imageExport';
+import { defaultExportFilename, supportsWebpExport } from '../utils/imageExport';
 
 interface ExportPanelProps {
   media: LoadedMedia | null;
@@ -18,15 +18,7 @@ interface ExportPanelProps {
   onClearError: () => void;
 }
 
-const IMAGE_FORMATS: ExportFormat[] = ['png', 'jpeg'];
-const GIF_FORMATS: ExportFormat[] = ['gif'];
-const VIDEO_FORMATS: ExportFormat[] = ['mp4', 'webm'];
-
-const SIZE_OPTIONS: { id: ExportSizeMode; label: string; hint: string }[] = [
-  { id: 'original', label: 'Original', hint: '100%' },
-  { id: 'medium', label: 'Medium', hint: '75%' },
-  { id: 'small', label: 'Small', hint: '50%' },
-];
+const SCALE_PRESETS = [100, 75, 50, 25];
 
 export function ExportPanel({
   media,
@@ -39,18 +31,25 @@ export function ExportPanel({
 }: ExportPanelProps) {
   const [open, setOpen] = useState(false);
   const [filename, setFilename] = useState(defaultName);
-  const [sizeMode, setSizeMode] = useState<ExportSizeMode>('original');
-  const [optimize, setOptimize] = useState(false);
   const [format, setFormat] = useState<ExportFormat>('png');
+  const [scalePercent, setScalePercent] = useState(100);
+  const [imageQuality, setImageQuality] = useState(0.92);
+  const [gifQuality, setGifQuality] = useState(10);
+  const [frameSkip, setFrameSkip] = useState(1);
+  const [dither, setDither] = useState(false);
+  const [optimizeVideo, setOptimizeVideo] = useState(false);
+
+  const webpSupported = useMemo(() => supportsWebpExport(), []);
 
   const availableFormats = useMemo(() => {
     const formats: ExportFormat[] = [];
     if (!media) return formats;
-    formats.push(...IMAGE_FORMATS);
-    if (media.type === 'gif') formats.push(...GIF_FORMATS);
-    if (media.type === 'video') formats.push(...VIDEO_FORMATS);
-    return [...new Set(formats)];
-  }, [media]);
+    formats.push('png', 'jpeg');
+    if (webpSupported) formats.push('webp');
+    if (media.type === 'gif') formats.push('gif');
+    if (media.type === 'video') formats.push('mp4', 'webm');
+    return formats;
+  }, [media, webpSupported]);
 
   useEffect(() => {
     setFilename(defaultName);
@@ -62,14 +61,31 @@ export function ExportPanel({
     }
   }, [availableFormats, format]);
 
-  const optimizeHint =
-    format === 'png'
-      ? 'PNG keeps full quality; use JPEG or smaller size for lighter files'
-      : format === 'jpeg'
-        ? 'Lower JPEG quality for smaller files'
-        : format === 'gif'
-          ? 'Coarser palette for smaller GIFs'
-          : 'Lower bitrate / CRF and slightly fewer frames';
+  const scaledWidth = media ? Math.max(1, Math.round(media.width * (scalePercent / 100))) : 0;
+  const scaledHeight = media ? Math.max(1, Math.round(media.height * (scalePercent / 100))) : 0;
+  const showFrameSkip = format === 'gif' || format === 'mp4' || format === 'webm';
+  const showImageQuality = format === 'jpeg' || format === 'webp';
+  const showGifControls = format === 'gif';
+  const showVideoOptimize = format === 'mp4' || format === 'webm';
+
+  const applyCompactPreset = () => {
+    setScalePercent(50);
+    setImageQuality(0.72);
+    setGifQuality(18);
+    setFrameSkip(2);
+    setDither(false);
+    setOptimizeVideo(true);
+  };
+
+  const applyDefaultPreset = () => {
+    const defaults = defaultExportOptions();
+    setScalePercent(defaults.scalePercent);
+    setImageQuality(defaults.imageQuality);
+    setGifQuality(defaults.gifQuality);
+    setFrameSkip(defaults.frameSkip);
+    setDither(defaults.dither);
+    setOptimizeVideo(defaults.optimizeVideo);
+  };
 
   return (
     <div className="export-panel">
@@ -96,7 +112,7 @@ export function ExportPanel({
 
           <div className="export-field">
             <span>Format</span>
-            <div className="segmented-control">
+            <div className="segmented-control wrap">
               {availableFormats.map((item) => (
                 <button
                   key={item}
@@ -111,33 +127,126 @@ export function ExportPanel({
           </div>
 
           <div className="export-field">
-            <span>Size</span>
+            <span>
+              Resolution scale
+              <span className="control-value">
+                {scalePercent}% · {scaledWidth}×{scaledHeight}
+              </span>
+            </span>
             <div className="segmented-control">
-              {SIZE_OPTIONS.map((option) => (
+              {SCALE_PRESETS.map((preset) => (
                 <button
-                  key={option.id}
+                  key={preset}
                   type="button"
-                  className={sizeMode === option.id ? 'active' : ''}
-                  onClick={() => setSizeMode(option.id)}
-                  title={option.hint}
+                  className={scalePercent === preset ? 'active' : ''}
+                  onClick={() => setScalePercent(preset)}
                 >
-                  {option.label}
+                  {preset}%
                 </button>
               ))}
             </div>
+            <input
+              type="range"
+              min={10}
+              max={100}
+              step={1}
+              value={scalePercent}
+              onChange={(event) => setScalePercent(Number(event.target.value))}
+            />
           </div>
 
-          <label className="export-field export-toggle">
-            <span>
-              Optimize file size
-              <small>{optimizeHint}</small>
-            </span>
-            <input
-              type="checkbox"
-              checked={optimize}
-              onChange={(event) => setOptimize(event.target.checked)}
-            />
-          </label>
+          {showImageQuality && (
+            <label className="export-field">
+              <span>
+                Image quality
+                <span className="control-value">{Math.round(imageQuality * 100)}%</span>
+              </span>
+              <input
+                type="range"
+                min={50}
+                max={100}
+                step={1}
+                value={Math.round(imageQuality * 100)}
+                onChange={(event) => setImageQuality(Number(event.target.value) / 100)}
+              />
+            </label>
+          )}
+
+          {showGifControls && (
+            <>
+              <label className="export-field">
+                <span>
+                  GIF encoder quality
+                  <span className="control-value">{gifQuality}</span>
+                </span>
+                <small>Lower = better colors / larger files. Higher = smaller files.</small>
+                <input
+                  type="range"
+                  min={1}
+                  max={30}
+                  step={1}
+                  value={gifQuality}
+                  onChange={(event) => setGifQuality(Number(event.target.value))}
+                />
+              </label>
+              <label className="export-field export-toggle">
+                <span>
+                  Dithering
+                  <small>Smoother gradients, usually larger GIFs</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={dither}
+                  onChange={(event) => setDither(event.target.checked)}
+                />
+              </label>
+            </>
+          )}
+
+          {showFrameSkip && (
+            <label className="export-field">
+              <span>
+                Keep every Nth frame
+                <span className="control-value">{frameSkip}</span>
+              </span>
+              <small>
+                {frameSkip === 1
+                  ? 'Export every frame'
+                  : `Skip frames for roughly ${Math.round(100 / frameSkip)}% of the motion samples`}
+              </small>
+              <input
+                type="range"
+                min={1}
+                max={10}
+                step={1}
+                value={frameSkip}
+                onChange={(event) => setFrameSkip(Number(event.target.value))}
+              />
+            </label>
+          )}
+
+          {showVideoOptimize && (
+            <label className="export-field export-toggle">
+              <span>
+                Optimize video bitrate
+                <small>Higher CRF / lower bitrate and slightly fewer fps</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={optimizeVideo}
+                onChange={(event) => setOptimizeVideo(event.target.checked)}
+              />
+            </label>
+          )}
+
+          <div className="export-presets">
+            <button type="button" className="btn btn-small" onClick={applyDefaultPreset}>
+              Quality defaults
+            </button>
+            <button type="button" className="btn btn-small" onClick={applyCompactPreset}>
+              Compact preset
+            </button>
+          </div>
 
           <button
             type="button"
@@ -145,8 +254,12 @@ export function ExportPanel({
             onClick={() => {
               onExport(format, {
                 filename: filename.trim() || defaultName,
-                sizeMode,
-                optimize,
+                scalePercent,
+                imageQuality,
+                gifQuality,
+                frameSkip,
+                dither,
+                optimizeVideo,
               });
               setOpen(false);
             }}
