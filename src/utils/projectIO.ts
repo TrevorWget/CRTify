@@ -7,8 +7,11 @@ import {
   type LoadedMedia,
   type TextLayer,
 } from '../types/crt';
+import { downloadBlob } from './imageExport';
+import { loadImageElement } from './textCompositor';
 
 const SHARE_PREFIX = 'look=';
+const EMBEDDED_IMAGE = /^data:image\/(png|jpeg|gif|webp);base64,/;
 
 export interface ShareableLook {
   settings: CrtSettings;
@@ -37,6 +40,47 @@ export function serializeLayers(layers: TextLayer[]): Array<Omit<TextLayer, 'ima
   return layers.map(({ imageElement: _ignored, ...rest }) => ({ ...rest }));
 }
 
+function imageToDataUrl(image: HTMLImageElement): string | undefined {
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return undefined;
+  ctx.drawImage(image, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
+/** Sticker blob URLs die with the tab, so project files carry the pixels inline. */
+function serializeLayersWithImages(layers: TextLayer[]): Array<Omit<TextLayer, 'imageElement'>> {
+  return layers.map(({ imageElement, ...rest }) => {
+    if (rest.kind !== 'image') return { ...rest };
+    const imageUrl =
+      rest.imageUrl && EMBEDDED_IMAGE.test(rest.imageUrl)
+        ? rest.imageUrl
+        : imageElement
+          ? imageToDataUrl(imageElement)
+          : undefined;
+    return { ...rest, imageUrl };
+  });
+}
+
+/** Decode embedded sticker images. Anything other than an inline data URL is dropped. */
+export async function hydrateImageLayers(layers: TextLayer[]): Promise<TextLayer[]> {
+  return Promise.all(
+    layers.map(async (layer) => {
+      if (layer.kind !== 'image') return layer;
+      if (!layer.imageUrl || !EMBEDDED_IMAGE.test(layer.imageUrl)) {
+        return { ...layer, imageUrl: undefined, imageElement: undefined };
+      }
+      try {
+        return { ...layer, imageElement: await loadImageElement(layer.imageUrl) };
+      } catch {
+        return { ...layer, imageUrl: undefined, imageElement: undefined };
+      }
+    }),
+  );
+}
+
 export function buildProject(
   settings: CrtSettings,
   textLayers: TextLayer[],
@@ -50,7 +94,7 @@ export function buildProject(
     name,
     settings: normalizeCrtSettings(settings),
     crtAffectText,
-    textLayers: serializeLayers(textLayers),
+    textLayers: serializeLayersWithImages(textLayers),
     exportOptions,
     mediaHint: media
       ? {
@@ -65,12 +109,7 @@ export function buildProject(
 
 export function downloadProject(project: CrtifyProjectV1, filename = 'project.crtify.json') {
   const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, filename);
 }
 
 export function parseProject(data: unknown): CrtifyProjectV1 {
@@ -92,11 +131,22 @@ export function parseProject(data: unknown): CrtifyProjectV1 {
 
 export async function loadProjectFile(file: File): Promise<CrtifyProjectV1> {
   const text = await file.text();
-  return parseProject(JSON.parse(text));
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('Project file is not valid JSON');
+  }
+  return parseProject(data);
 }
 
 export function encodeShareLook(look: ShareableLook): string {
   return `${SHARE_PREFIX}${toBase64Url(JSON.stringify(look))}`;
+}
+
+/** Share links can't carry local sticker files, so image layers are left out. */
+export function shareableLayers(layers: TextLayer[]): Array<Omit<TextLayer, 'imageElement'>> {
+  return serializeLayers(layers.filter((layer) => layer.kind !== 'image'));
 }
 
 export function applyShareHash(hash: string = window.location.hash): ShareableLook | null {
@@ -107,7 +157,9 @@ export function applyShareHash(hash: string = window.location.hash): ShareableLo
     return {
       settings: normalizeCrtSettings(payload.settings),
       crtAffectText: payload.crtAffectText,
-      textLayers: payload.textLayers?.map((layer) => normalizeTextLayer(layer)),
+      textLayers: payload.textLayers
+        ?.map((layer) => normalizeTextLayer(layer))
+        .filter((layer) => layer.kind !== 'image'),
     };
   } catch {
     return null;
@@ -123,9 +175,10 @@ export function writeShareHash(look: ShareableLook) {
 
 export async function copyShareLink(look: ShareableLook): Promise<string> {
   const url = `${window.location.origin}${window.location.pathname}${window.location.search}#${encodeShareLook(look)}`;
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(url);
-  }
   writeShareHash(look);
+  if (!navigator.clipboard?.writeText) {
+    throw new Error('Clipboard is unavailable; the link is in the address bar instead.');
+  }
+  await navigator.clipboard.writeText(url);
   return url;
 }

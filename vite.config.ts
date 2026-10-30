@@ -6,18 +6,8 @@ export default defineConfig({
   // For the project URL https://trevorwget.github.io/CRTify/ use base: '/CRTify/' instead.
   base: '/',
   plugins: [react()],
-  server: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
-  },
-  preview: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
-  },
+  // No COOP/COEP headers: the single-threaded ffmpeg core doesn't need
+  // SharedArrayBuffer, and GitHub Pages can't send them in production anyway.
   optimizeDeps: {
     exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util', 'wasm-webp'],
   },
