@@ -25,6 +25,8 @@ interface PreviewCanvasProps {
   onTogglePlay: () => void;
   onGifFrameChange: (index: number) => void;
   onVideoTimeChange?: (seconds: number) => void;
+  /** Exports drive the shared video element, so transport controls are disabled meanwhile. */
+  playbackLocked?: boolean;
 }
 
 const MIN_ZOOM = 0.1;
@@ -47,6 +49,7 @@ export function PreviewCanvas({
   onTogglePlay,
   onGifFrameChange,
   onVideoTimeChange,
+  playbackLocked = false,
 }: PreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -62,7 +65,7 @@ export function PreviewCanvas({
   const [previewMuted, setPreviewMuted] = useState(true);
   const [previewVolume, setPreviewVolume] = useState(1);
 
-  const { canvasRef, render } = useCrtRenderer({
+  const { canvasRef } = useCrtRenderer({
     media,
     settings,
     textLayers,
@@ -80,8 +83,8 @@ export function PreviewCanvas({
     crtAffectText: crtAffectTextB,
     selectedLayerId: null,
     gifFrameIndex,
-    isPlaying,
-    onGifFrameChange: undefined,
+    isPlaying: compareEnabled && isPlaying,
+    controlsPlayback: false,
   });
 
   const computeFitZoom = useCallback(() => {
@@ -160,7 +163,7 @@ export function PreviewCanvas({
 
   const scrubTo = useCallback(
     (value: number) => {
-      if (!media) return;
+      if (!media || playbackLocked) return;
       if (isPlaying) onTogglePlay();
 
       if (isFrameSequenceMedia(media)) {
@@ -172,14 +175,8 @@ export function PreviewCanvas({
       video.currentTime = value;
       setVideoTime(value);
       onVideoTimeChange?.(value);
-      // Seeking does not re-run React state, so repaint once the frame lands.
-      const repaint = () => {
-        render();
-        video.removeEventListener('seeked', repaint);
-      };
-      video.addEventListener('seeked', repaint);
     },
-    [media, isPlaying, onTogglePlay, onGifFrameChange, onVideoTimeChange, render],
+    [media, playbackLocked, isPlaying, onTogglePlay, onGifFrameChange, onVideoTimeChange],
   );
 
   const getCanvasCoords = useCallback(
@@ -326,12 +323,19 @@ export function PreviewCanvas({
             </div>
             {isPlayableMedia(media) && (
               <div className="transport-controls">
-                <button type="button" className="btn btn-small" onClick={onTogglePlay}>
+                <button
+                  type="button"
+                  className="btn btn-small"
+                  onClick={onTogglePlay}
+                  disabled={playbackLocked}
+                  title={playbackLocked ? 'Playback is paused while exporting' : undefined}
+                >
                   {isPlaying ? '⏸ Pause' : '▶ Play'}
                 </button>
                 <input
                   className="scrubber"
                   type="range"
+                  disabled={playbackLocked}
                   min={0}
                   max={scrubMax}
                   step={scrubStep}

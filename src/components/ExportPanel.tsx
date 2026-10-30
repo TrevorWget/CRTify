@@ -25,7 +25,6 @@ interface ExportPanelProps {
   defaultName: string;
   queue: ExportQueueItem[];
   onExport: (format: ExportFormat, config: ExportOptionsConfig) => void;
-  onEnqueue: (format: ExportFormat, config: ExportOptionsConfig) => void;
   onClearFinished: () => void;
   onClearError: () => void;
 }
@@ -40,7 +39,6 @@ export function ExportPanel({
   defaultName,
   queue,
   onExport,
-  onEnqueue,
   onClearFinished,
   onClearError,
 }: ExportPanelProps) {
@@ -87,7 +85,7 @@ export function ExportPanel({
   }, [availableFormats, format]);
 
   const handleOpenExport = () => {
-    if (!media || exporting) return;
+    if (!media) return;
     if (!open) {
       const preferred = preferredExportFormat(media);
       if (availableFormats.includes(preferred)) setFormat(preferred);
@@ -158,10 +156,10 @@ export function ExportPanel({
       <button
         type="button"
         className="btn btn-primary export-btn"
-        disabled={!media || exporting}
+        disabled={!media}
         onClick={handleOpenExport}
       >
-        {exporting ? 'Exporting...' : 'Export ▼'}
+        {exporting ? 'Exporting… ▼' : 'Export ▼'}
       </button>
 
       {open && media && (
@@ -384,22 +382,10 @@ export function ExportPanel({
             <button
               type="button"
               className="btn btn-primary export-confirm"
-              disabled={exporting}
-              onClick={() => {
-                onExport(format, currentOptions());
-              }}
+              onClick={() => onExport(format, currentOptions())}
+              title={exporting ? 'Runs after the current export finishes' : undefined}
             >
-              Queue {formatLabel(format)}
-            </button>
-            <button
-              type="button"
-              className="btn btn-small"
-              disabled={exporting}
-              onClick={() => {
-                onEnqueue(format, currentOptions());
-              }}
-            >
-              + Add to queue
+              {exporting ? 'Queue' : 'Export'} {formatLabel(format)}
             </button>
           </div>
 

@@ -1,13 +1,17 @@
 import GIF from 'gif.js';
 import type { CrtSettings, ExportProgress, GifFrame, TextLayer } from '../types/crt';
-import { applyBezelChrome } from './bezelOverlay';
-import { CrtRenderer } from './webgl';
-import { drawTextLayers } from './textCompositor';
-import { imageDataToCanvas } from './mediaLoader';
+import { frameSequenceTime } from './animationMedia';
+import {
+  composeExportFrame,
+  imageDataToScratchCanvas,
+  selectFrameIndexes,
+  sourceHasTransparency,
+  spanDelay,
+  yieldToBrowser,
+} from './exportShared';
 import { percentToScale } from './imageExport';
+import { CrtRenderer } from './webgl';
 
-const frameCanvas = document.createElement('canvas');
-const frameCtx = frameCanvas.getContext('2d')!;
 const encodeCanvas = document.createElement('canvas');
 const encodeCtx = encodeCanvas.getContext('2d', { willReadFrequently: true })!;
 
@@ -29,16 +33,8 @@ export interface GifExportSettings {
   gifQuality: number;
   frameSkip: number;
   dither: boolean;
-}
-
-function sourceHasTransparency(frames: GifFrame[]): boolean {
-  for (const frame of frames) {
-    const data = frame.imageData.data;
-    for (let i = 3; i < data.length; i += 4) {
-      if (data[i] < 255) return true;
-    }
-  }
-  return false;
+  /** Frames already have the CRT pass, text and bezel baked in. */
+  preRendered?: boolean;
 }
 
 function applyTransparencyKey(imageData: ImageData) {
@@ -68,32 +64,38 @@ export async function exportGif(
   onProgress: (progress: ExportProgress) => void,
   exportSettings: GifExportSettings,
 ): Promise<Blob> {
-  const renderer = new CrtRenderer();
-  const sourceWidth = frames[0].imageData.width;
-  const sourceHeight = frames[0].imageData.height;
+  const preRendered = Boolean(exportSettings.preRendered);
   const scale = percentToScale(exportSettings.scalePercent);
-  const width = Math.max(1, Math.round(sourceWidth * scale));
-  const height = Math.max(1, Math.round(sourceHeight * scale));
-  const frameSkip = Math.max(1, Math.round(exportSettings.frameSkip));
   const quality = Math.min(30, Math.max(1, Math.round(exportSettings.gifQuality)));
+  const selectedIndexes = selectFrameIndexes(frames.length, exportSettings.frameSkip);
+  const usesTransparency =
+    (!preRendered && settings.curvature > 0) || sourceHasTransparency(frames);
 
-  frameCanvas.width = sourceWidth;
-  frameCanvas.height = sourceHeight;
-  encodeCanvas.width = width;
-  encodeCanvas.height = height;
+  const renderer = preRendered ? null : new CrtRenderer();
+  const finishedFrame = (index: number) =>
+    renderer
+      ? composeExportFrame(
+          renderer,
+          frames[index].imageData,
+          settings,
+          textLayers,
+          crtAffectText,
+          frameSequenceTime(index),
+          frames.length <= 1 ? 0 : index / (frames.length - 1),
+          true,
+        )
+      : imageDataToScratchCanvas(frames[index].imageData);
 
-  const usesTransparency = settings.curvature > 0 || sourceHasTransparency(frames);
-  const selectedIndexes: number[] = [];
-  for (let i = 0; i < frames.length; i += frameSkip) {
-    selectedIndexes.push(i);
-  }
-  if (selectedIndexes[selectedIndexes.length - 1] !== frames.length - 1) {
-    selectedIndexes.push(frames.length - 1);
-  }
+  try {
+    // The bezel enlarges frames, so size the GIF from the first finished frame.
+    const first = finishedFrame(0);
+    const width = Math.max(1, Math.round(first.width * scale));
+    const height = Math.max(1, Math.round(first.height * scale));
+    encodeCanvas.width = width;
+    encodeCanvas.height = height;
 
-  return new Promise((resolve, reject) => {
     const gif = new GIF({
-      workers: 2,
+      workers: Math.min(4, Math.max(2, (navigator.hardwareConcurrency || 2) - 1)),
       quality,
       width,
       height,
@@ -104,66 +106,40 @@ export async function exportGif(
       workerScript: `${import.meta.env.BASE_URL}gif.worker.js`,
     });
 
-    gif.on('finished', (blob: Blob) => {
-      renderer.destroy();
-      resolve(blob);
-    });
+    for (let step = 0; step < selectedIndexes.length; step++) {
+      const i = selectedIndexes[step];
+      onProgress({
+        stage: `Processing frame ${step + 1}/${selectedIndexes.length}`,
+        progress: (step / selectedIndexes.length) * 0.5,
+      });
 
-    gif.on('progress', (p: number) => {
-      onProgress({ stage: 'Encoding GIF', progress: 0.5 + p * 0.5 });
-    });
+      const output = step === 0 ? first : finishedFrame(i);
+      encodeCtx.clearRect(0, 0, width, height);
+      encodeCtx.imageSmoothingEnabled = true;
+      encodeCtx.imageSmoothingQuality = 'high';
+      encodeCtx.drawImage(output, 0, 0, width, height);
 
-    (async () => {
-      try {
-        for (let step = 0; step < selectedIndexes.length; step++) {
-          const i = selectedIndexes[step];
-          const next = selectedIndexes[step + 1] ?? frames.length;
-          let delay = 0;
-          for (let d = i; d < next; d++) {
-            delay += frames[d].delay;
-          }
-
-          onProgress({
-            stage: `Processing frame ${step + 1}/${selectedIndexes.length}`,
-            progress: (step / selectedIndexes.length) * 0.5,
-          });
-
-          frameCtx.clearRect(0, 0, sourceWidth, sourceHeight);
-          frameCtx.putImageData(frames[i].imageData, 0, 0);
-
-          const time = i * 0.1;
-          const timeline = frames.length <= 1 ? 0 : i / (frames.length - 1);
-          const crtCanvas = renderer.renderFrame(frameCanvas, settings, time, {
-            preserveAlpha: true,
-          });
-          drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
-          let output: HTMLCanvasElement = crtCanvas;
-          if (settings.showBezel) output = applyBezelChrome(output);
-
-          encodeCtx.clearRect(0, 0, width, height);
-          encodeCtx.imageSmoothingEnabled = true;
-          encodeCtx.imageSmoothingQuality = 'high';
-          encodeCtx.drawImage(output, 0, 0, width, height);
-
-          if (usesTransparency) {
-            const imageData = encodeCtx.getImageData(0, 0, width, height);
-            applyTransparencyKey(imageData);
-            encodeCtx.putImageData(imageData, 0, 0);
-          }
-
-          // GIFEncoder forces dispose=2 whenever a transparent color is set,
-          // which is what keeps previous frames from bleeding through.
-          gif.addFrame(encodeCanvas, { copy: true, delay });
-        }
-        gif.render();
-      } catch (err) {
-        renderer.destroy();
-        reject(err);
+      if (usesTransparency) {
+        const imageData = encodeCtx.getImageData(0, 0, width, height);
+        applyTransparencyKey(imageData);
+        encodeCtx.putImageData(imageData, 0, 0);
       }
-    })();
-  });
-}
 
-export function framesToCanvases(frames: GifFrame[]): HTMLCanvasElement[] {
-  return frames.map((f) => imageDataToCanvas(f.imageData));
+      // GIFEncoder forces dispose=2 whenever a transparent color is set,
+      // which is what keeps previous frames from bleeding through.
+      gif.addFrame(encodeCanvas, { copy: true, delay: spanDelay(frames, selectedIndexes, step) });
+      await yieldToBrowser();
+    }
+
+    return await new Promise<Blob>((resolve, reject) => {
+      gif.on('finished', (blob: Blob) => resolve(blob));
+      gif.on('abort', () => reject(new Error('GIF encoding was aborted')));
+      gif.on('progress', (p: number) => {
+        onProgress({ stage: 'Encoding GIF', progress: 0.5 + p * 0.5 });
+      });
+      gif.render();
+    });
+  } finally {
+    renderer?.destroy();
+  }
 }

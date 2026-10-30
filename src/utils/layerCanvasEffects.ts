@@ -7,6 +7,27 @@ const tintCanvas = document.createElement('canvas');
 const tintCtx = tintCanvas.getContext('2d');
 const mashBuffers = new Map<string, HTMLCanvasElement>();
 
+/** Drop datamosh history for layers that no longer exist. */
+export function pruneLayerBuffers(layers: TextLayer[]) {
+  if (mashBuffers.size === 0) return;
+  const live = new Set(layers.map((layer) => layer.id));
+  for (const id of mashBuffers.keys()) {
+    if (!live.has(id)) mashBuffers.delete(id);
+  }
+}
+
+/** Small seeded PRNG (mulberry32) for effects that need many samples per frame. */
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function prepareBuffer(source: HTMLCanvasElement) {
   if (!bufferCtx) return null;
   if (bufferCanvas.width !== source.width || bufferCanvas.height !== source.height) {
@@ -48,16 +69,18 @@ function applyStatic(canvas: HTMLCanvasElement, effect: LayerEffect, time: numbe
   if (!ctx) return;
   const step = effectStep(effect, time, 30);
   const count = Math.round(50 + intensity * 500);
+  const random = seededRandom(hash01(`${effect.id}:${step}:static`) * 0xffffffff);
   ctx.save();
   ctx.globalCompositeOperation = 'source-atop';
   ctx.globalAlpha = 0.15 + intensity * 0.5;
-  for (let index = 0; index < count; index++) {
-    const x = hash01(`${effect.id}:${step}:sx:${index}`) * canvas.width;
-    const y = hash01(`${effect.id}:${step}:sy:${index}`) * canvas.height;
-    const light = hash01(`${effect.id}:${step}:sl:${index}`) > 0.5;
-    const size = 1 + hash01(`${effect.id}:${step}:ss:${index}`) * 2;
-    ctx.fillStyle = light ? '#fff' : '#000';
-    ctx.fillRect(x, y, size, size);
+  for (const color of ['#fff', '#000']) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let index = 0; index < count / 2; index++) {
+      const size = 1 + random() * 2;
+      ctx.rect(random() * canvas.width, random() * canvas.height, size, size);
+    }
+    ctx.fill();
   }
   ctx.restore();
 }

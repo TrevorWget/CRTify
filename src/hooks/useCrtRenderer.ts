@@ -2,8 +2,11 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { CrtSettings, LoadedMedia, TextLayer } from '../types/crt';
 import { CrtRenderer } from '../utils/webgl';
 import { drawTextLayers } from '../utils/textCompositor';
-import { imageDataToCanvas } from '../utils/mediaLoader';
-import { getTimelinePosition, isFrameSequenceMedia } from '../utils/animationMedia';
+import {
+  getPreviewTime,
+  getTimelinePosition,
+  isFrameSequenceMedia,
+} from '../utils/animationMedia';
 
 interface UseCrtRendererOptions {
   media: LoadedMedia | null;
@@ -13,8 +16,14 @@ interface UseCrtRendererOptions {
   selectedLayerId: string | null;
   gifFrameIndex: number;
   isPlaying: boolean;
+  /** Advances frame sequences; renderers without it only follow the shared playhead. */
   onGifFrameChange?: (index: number) => void;
+  /** Only one renderer per media element should start and stop video playback. */
+  controlsPlayback?: boolean;
 }
+
+/** GIFs that sit on one frame for longer than this restart timing instead of fast-forwarding. */
+const MAX_CATCH_UP_MS = 1000;
 
 export function useCrtRenderer({
   media,
@@ -25,92 +34,118 @@ export function useCrtRenderer({
   gifFrameIndex,
   isPlaying,
   onGifFrameChange,
+  controlsPlayback = true,
 }: UseCrtRendererOptions) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CrtRenderer | null>(null);
-  const animFrameRef = useRef<number>(0);
-  const timeRef = useRef(0);
+  const frameIndexRef = useRef(gifFrameIndex);
 
   const render = useCallback(() => {
-    if (!media || !canvasRef.current) return;
+    const displayCanvas = canvasRef.current;
+    if (!media || !displayCanvas) return;
 
-    if (!rendererRef.current) {
-      rendererRef.current = new CrtRenderer();
-    }
-
-    const renderer = rendererRef.current;
-    let source: CanvasImageSource | null = null;
-    let time = timeRef.current;
-
+    let source: TexImageSource | null = null;
     if (media.type === 'image' && media.image) {
       source = media.image;
     } else if (isFrameSequenceMedia(media) && media.gifFrames) {
-      const frame = media.gifFrames[gifFrameIndex % media.gifFrames.length];
-      source = imageDataToCanvas(frame.imageData);
-      time = gifFrameIndex * 0.1;
+      source = media.gifFrames[gifFrameIndex % media.gifFrames.length].imageData;
     } else if (media.type === 'video' && media.video) {
+      if (media.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
       source = media.video;
-      time = media.video.currentTime;
     }
-
     if (!source) return;
 
-    const timeline = getTimelinePosition(media, gifFrameIndex);
-
-    const crtCanvas = renderer.renderFrame(source, settings, time, { preserveAlpha: true });
-    const displayCanvas = canvasRef.current;
-    displayCanvas.width = crtCanvas.width;
-    displayCanvas.height = crtCanvas.height;
+    rendererRef.current ??= new CrtRenderer();
+    const crtCanvas = rendererRef.current.renderFrame(
+      source,
+      settings,
+      getPreviewTime(media, gifFrameIndex),
+      { preserveAlpha: true },
+    );
+    if (displayCanvas.width !== crtCanvas.width) displayCanvas.width = crtCanvas.width;
+    if (displayCanvas.height !== crtCanvas.height) displayCanvas.height = crtCanvas.height;
     const ctx = displayCanvas.getContext('2d');
     if (!ctx) return;
 
     ctx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
     ctx.drawImage(crtCanvas, 0, 0);
-    drawTextLayers(displayCanvas, textLayers, settings, crtAffectText, selectedLayerId, timeline);
+    drawTextLayers(
+      displayCanvas,
+      textLayers,
+      settings,
+      crtAffectText,
+      selectedLayerId,
+      getTimelinePosition(media, gifFrameIndex),
+    );
   }, [media, settings, textLayers, crtAffectText, selectedLayerId, gifFrameIndex]);
 
+  const renderRef = useRef(render);
   useEffect(() => {
+    renderRef.current = render;
+    frameIndexRef.current = gifFrameIndex;
     render();
-  }, [render]);
+  }, [render, gifFrameIndex]);
+
+  useEffect(() => {
+    const video = media?.type === 'video' ? media.video : undefined;
+    if (!video) return;
+    const repaint = () => renderRef.current();
+    video.addEventListener('loadeddata', repaint);
+    video.addEventListener('seeked', repaint);
+    return () => {
+      video.removeEventListener('loadeddata', repaint);
+      video.removeEventListener('seeked', repaint);
+    };
+  }, [media]);
 
   useEffect(() => {
     if (!media || !isPlaying) return;
 
     if (isFrameSequenceMedia(media) && media.gifFrames) {
-      let frameIdx = gifFrameIndex;
-      let lastTime = performance.now();
+      if (!onGifFrameChange) return;
+      const frames = media.gifFrames;
+      let frameIdx = frameIndexRef.current % frames.length;
+      let due = performance.now() + frames[frameIdx].delay;
+      let handle = 0;
 
       const animate = (now: number) => {
-        const frames = media.gifFrames!;
-        const delay = frames[frameIdx % frames.length].delay;
-        if (now - lastTime >= delay) {
-          frameIdx = (frameIdx + 1) % frames.length;
-          lastTime = now;
-          timeRef.current = frameIdx * 0.1;
-          onGifFrameChange?.(frameIdx);
+        if (now >= due) {
+          if (now - due > MAX_CATCH_UP_MS) due = now;
+          while (now >= due) {
+            frameIdx = (frameIdx + 1) % frames.length;
+            due += frames[frameIdx].delay;
+          }
+          onGifFrameChange(frameIdx);
         }
-        animFrameRef.current = requestAnimationFrame(animate);
+        handle = requestAnimationFrame(animate);
       };
 
-      animFrameRef.current = requestAnimationFrame(animate);
-      return () => cancelAnimationFrame(animFrameRef.current);
+      handle = requestAnimationFrame(animate);
+      return () => cancelAnimationFrame(handle);
     }
 
-    if (media.type === 'video' && media.video) {
-      media.video.play();
-      const animate = () => {
-        render();
-        if (!media.video!.paused && !media.video!.ended) {
-          animFrameRef.current = requestAnimationFrame(animate);
-        }
-      };
-      animFrameRef.current = requestAnimationFrame(animate);
-      return () => {
-        cancelAnimationFrame(animFrameRef.current);
-        media.video?.pause();
-      };
+    const video = media.type === 'video' ? media.video : undefined;
+    if (!video) return;
+
+    if (controlsPlayback) {
+      video.play().catch((err: unknown) => console.warn('Preview playback failed', err));
     }
-  }, [media, isPlaying, gifFrameIndex, render, onGifFrameChange]);
+    const hasVideoFrameCallback = typeof video.requestVideoFrameCallback === 'function';
+    let handle = 0;
+    const tick = () => {
+      renderRef.current();
+      handle = hasVideoFrameCallback
+        ? video.requestVideoFrameCallback(tick)
+        : requestAnimationFrame(tick);
+    };
+    tick();
+
+    return () => {
+      if (hasVideoFrameCallback) video.cancelVideoFrameCallback(handle);
+      else cancelAnimationFrame(handle);
+      if (controlsPlayback) video.pause();
+    };
+  }, [media, isPlaying, onGifFrameChange, controlsPlayback]);
 
   useEffect(() => {
     return () => {

@@ -6,7 +6,8 @@ export function downloadBlob(blob: Blob, filename: string) {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  // Revoking synchronously can cancel the download before the browser has read the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function sanitizeExportFilename(name: string): string {
@@ -50,7 +51,9 @@ export function getVideoBitrate(optimize: boolean, scalePercent: number): number
   return Math.round(base * percentToScale(scalePercent));
 }
 
-export function getVideoCrf(optimize: boolean): number {
+/** x264 and VP9 use different CRF scales (0–51 vs 0–63). */
+export function getVideoCrf(optimize: boolean, format: 'mp4' | 'webm'): number {
+  if (format === 'webm') return optimize ? 32 : 28;
   return optimize ? 28 : 23;
 }
 

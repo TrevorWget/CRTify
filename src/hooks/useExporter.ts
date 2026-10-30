@@ -4,6 +4,7 @@ import type {
   ExportFormat,
   ExportOptionsConfig,
   ExportProgress,
+  GifFrame,
   LoadedMedia,
   TextLayer,
 } from '../types/crt';
@@ -21,12 +22,18 @@ import {
   rasterizeVideoToFrames,
   stillToLoopFrames,
 } from '../utils/frameSequenceExport';
-import { exportVideo, exportVideoViaMediaRecorder } from '../utils/videoPipeline';
-import { applyBezelChrome } from '../utils/bezelOverlay';
+import {
+  canRecordFormat,
+  exportVideo,
+  exportVideoViaMediaRecorder,
+} from '../utils/videoPipeline';
+import { composeExportFrame } from '../utils/exportShared';
 import { CrtRenderer } from '../utils/webgl';
-import { drawTextLayers } from '../utils/textCompositor';
-import { imageDataToCanvas } from '../utils/mediaLoader';
-import { isFrameSequenceMedia } from '../utils/animationMedia';
+import {
+  getPreviewTime,
+  getTimelinePosition,
+  isFrameSequenceMedia,
+} from '../utils/animationMedia';
 
 interface ExportOptions {
   media: LoadedMedia;
@@ -35,6 +42,15 @@ interface ExportOptions {
   crtAffectText: boolean;
   gifFrameIndex: number;
   exportConfig: ExportOptionsConfig;
+}
+
+function currentStill(media: LoadedMedia, gifFrameIndex: number): TexImageSource | null {
+  if (media.type === 'image' && media.image) return media.image;
+  if (isFrameSequenceMedia(media) && media.gifFrames) {
+    return media.gifFrames[gifFrameIndex % media.gifFrames.length].imageData;
+  }
+  if (media.type === 'video' && media.video) return media.video;
+  return null;
 }
 
 export function useExporter() {
@@ -61,7 +77,7 @@ export function useExporter() {
         const scale = percentToScale(exportConfig.scalePercent);
         const animated = isFrameSequenceMedia(media);
 
-        if (format === 'gif' && media.gifFrames) {
+        if (format === 'gif' && animated && media.gifFrames) {
           const blob = await exportGif(
             media.gifFrames,
             settings,
@@ -91,7 +107,7 @@ export function useExporter() {
           );
           downloadBlob(blob, filename);
         } else if (format === 'gif' || (format === 'webp' && media.type === 'video')) {
-          let frames;
+          let frames: GifFrame[];
           if (media.type === 'video' && media.video) {
             frames = await rasterizeVideoToFrames(
               media.video,
@@ -107,16 +123,9 @@ export function useExporter() {
               },
             );
           } else {
-            const source =
-              media.type === 'image' && media.image
-                ? media.image
-                : media.gifFrames
-                  ? imageDataToCanvas(
-                      media.gifFrames[gifFrameIndex % media.gifFrames.length].imageData,
-                    )
-                  : null;
+            const source = currentStill(media, gifFrameIndex);
             if (!source) throw new Error('No media to export');
-            frames = stillToLoopFrames(
+            frames = await stillToLoopFrames(
               source,
               media.width,
               media.height,
@@ -127,58 +136,53 @@ export function useExporter() {
             );
           }
 
+          // Video frames are sampled at the requested scale; stills are rendered at source size.
+          const scalePercent = media.type === 'video' ? 100 : exportConfig.scalePercent;
           if (format === 'gif') {
             downloadBlob(
               await exportGif(frames, settings, [], false, setProgress, {
-                scalePercent: 100,
+                scalePercent,
                 gifQuality: exportConfig.gifQuality,
                 frameSkip: 1,
                 dither: exportConfig.dither,
+                preRendered: true,
               }),
               filename,
             );
           } else {
             downloadBlob(
               await exportAnimatedWebp(frames, settings, [], false, setProgress, {
-                scalePercent: 100,
+                scalePercent,
                 imageQuality: exportConfig.imageQuality,
                 frameSkip: 1,
+                preRendered: true,
               }),
               filename,
             );
           }
         } else if (format === 'png' || format === 'jpeg' || format === 'webp') {
-          const renderer = new CrtRenderer();
-          let source: CanvasImageSource | null = null;
-
-          if (media.type === 'image' && media.image) {
-            source = media.image;
-          } else if (isFrameSequenceMedia(media) && media.gifFrames) {
-            const frame = media.gifFrames[gifFrameIndex % media.gifFrames.length];
-            source = imageDataToCanvas(frame.imageData);
-          } else if (media.type === 'video' && media.video) {
-            source = media.video;
-          }
-
+          const source = currentStill(media, gifFrameIndex);
           if (!source) throw new Error('No media to export');
 
-          const timeline =
-            media.type === 'video' && media.video && media.video.duration > 0
-              ? media.video.currentTime / media.video.duration
-              : media.gifFrames && media.gifFrames.length > 1
-                ? gifFrameIndex / (media.gifFrames.length - 1)
-                : 0;
-          const crtCanvas = renderer.renderFrame(source, settings, 0, {
-            preserveAlpha: format === 'png' || format === 'webp',
-          });
-          drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
-          let output = scaleCanvas(crtCanvas, scale);
-          if (settings.showBezel) output = applyBezelChrome(output);
-          downloadBlob(
-            await exportCanvasImage(output, format, exportConfig.imageQuality),
-            filename,
-          );
-          renderer.destroy();
+          const renderer = new CrtRenderer();
+          try {
+            const frame = composeExportFrame(
+              renderer,
+              source,
+              settings,
+              textLayers,
+              crtAffectText,
+              getPreviewTime(media, gifFrameIndex),
+              getTimelinePosition(media, gifFrameIndex),
+              format === 'png' || format === 'webp',
+            );
+            downloadBlob(
+              await exportCanvasImage(scaleCanvas(frame, scale), format, exportConfig.imageQuality),
+              filename,
+            );
+          } finally {
+            renderer.destroy();
+          }
         } else if (format === 'mp4' || format === 'webm') {
           const videoSettings = {
             scalePercent: exportConfig.scalePercent,
@@ -199,12 +203,16 @@ export function useExporter() {
                 setProgress,
                 videoSettings,
               );
-            } catch {
+            } catch (ffmpegError) {
+              if (!canRecordFormat(format)) throw ffmpegError;
+              console.warn('ffmpeg export failed; recording in real time instead', ffmpegError);
+              setProgress({ stage: 'ffmpeg unavailable, recording without audio', progress: 0 });
               blob = await exportVideoViaMediaRecorder(
                 media.video,
                 settings,
                 textLayers,
                 crtAffectText,
+                format,
                 setProgress,
                 videoSettings,
               );
@@ -220,7 +228,7 @@ export function useExporter() {
               videoSettings,
             );
           } else if (media.image) {
-            const frames = stillToLoopFrames(
+            const frames = await stillToLoopFrames(
               media.image,
               media.width,
               media.height,
@@ -229,15 +237,10 @@ export function useExporter() {
               crtAffectText,
               24,
             );
-            blob = await exportFramesAsVideo(
-              frames,
-              settings,
-              [],
-              false,
-              format,
-              setProgress,
-              videoSettings,
-            );
+            blob = await exportFramesAsVideo(frames, settings, [], false, format, setProgress, {
+              ...videoSettings,
+              preRendered: true,
+            });
           } else {
             throw new Error('No media to export');
           }
