@@ -89,6 +89,8 @@ export function useExporter() {
               gifQuality: exportConfig.gifQuality,
               frameSkip: exportConfig.frameSkip,
               dither: exportConfig.dither,
+              rangeStart: exportConfig.rangeStart,
+              rangeEnd: exportConfig.rangeEnd,
             },
           );
           downloadBlob(blob, filename);
@@ -103,6 +105,8 @@ export function useExporter() {
               scalePercent: exportConfig.scalePercent,
               imageQuality: exportConfig.imageQuality,
               frameSkip: exportConfig.frameSkip,
+              rangeStart: exportConfig.rangeStart,
+              rangeEnd: exportConfig.rangeEnd,
             },
           );
           downloadBlob(blob, filename);
@@ -120,6 +124,8 @@ export function useExporter() {
                 frameSkip: exportConfig.frameSkip,
                 optimizeVideo: exportConfig.optimizeVideo,
                 maxFrames: 240,
+                rangeStart: exportConfig.rangeStart,
+                rangeEnd: exportConfig.rangeEnd,
               },
             );
           } else {
@@ -190,6 +196,8 @@ export function useExporter() {
             optimizeVideo: exportConfig.optimizeVideo,
             keepAudio: exportConfig.keepAudio,
             sourceFile: media.sourceFile,
+            rangeStart: exportConfig.rangeStart,
+            rangeEnd: exportConfig.rangeEnd,
           };
           let blob: Blob;
           if (media.video) {

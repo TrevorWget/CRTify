@@ -35,6 +35,8 @@ export interface GifExportSettings {
   dither: boolean;
   /** Frames already have the CRT pass, text and bezel baked in. */
   preRendered?: boolean;
+  rangeStart?: number;
+  rangeEnd?: number;
 }
 
 function applyTransparencyKey(imageData: ImageData) {
@@ -67,7 +69,12 @@ export async function exportGif(
   const preRendered = Boolean(exportSettings.preRendered);
   const scale = percentToScale(exportSettings.scalePercent);
   const quality = Math.min(30, Math.max(1, Math.round(exportSettings.gifQuality)));
-  const selectedIndexes = selectFrameIndexes(frames.length, exportSettings.frameSkip);
+  const selectedIndexes = selectFrameIndexes(
+    frames.length,
+    exportSettings.frameSkip,
+    exportSettings.rangeStart,
+    exportSettings.rangeEnd,
+  );
   const usesTransparency =
     (!preRendered && settings.curvature > 0) || sourceHasTransparency(frames);
 

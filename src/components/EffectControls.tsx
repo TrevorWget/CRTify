@@ -1,6 +1,8 @@
 import { defaultCrtSettings, type CrtPreset, type CrtSettings } from '../types/crt';
+import type { SceneKit } from '../utils/sceneKits';
 import { CollapsibleSection } from './CollapsibleSection';
 import { PresetRack } from './PresetRack';
+import { SceneKitRack } from './SceneKitRack';
 
 interface EffectControlsProps {
   settings: CrtSettings;
@@ -9,6 +11,9 @@ interface EffectControlsProps {
   crtAffectText: boolean;
   onCrtAffectTextChange: (value: boolean) => void;
   onApplyPreset: (preset: CrtPreset) => void;
+  onMutateLook: () => void;
+  onRandomizeLook: () => void;
+  onApplySceneKit: (kit: SceneKit) => void;
 }
 
 const EFFECT_HELP: Record<string, string> = {
@@ -25,7 +30,8 @@ const EFFECT_HELP: Record<string, string> = {
   Contrast: 'Expands or flattens the tonal range of the picture.',
   Flicker: 'Subtle brightness pulsing like an unstable CRT power supply.',
   'Flicker Intensity': 'How strong the flicker pulse is when flicker is enabled.',
-  'CRT-affect text': 'Also run overlay layers through the CRT shader stack.',
+  'CRT-affect text':
+    'Default for overlay layers: run them through the full CRT shader stack. Individual layers can override this.',
   'RGB Mask': 'Aperture-grille / shadow-mask RGB stripe pattern over the screen.',
   Interlace: 'Darkens alternate fields for a broadcast interlaced look.',
   'Roll Bar': 'Vertical rolling sync bar that drifts through the frame.',
@@ -84,6 +90,9 @@ export function EffectControls({
   crtAffectText,
   onCrtAffectTextChange,
   onApplyPreset,
+  onMutateLook,
+  onRandomizeLook,
+  onApplySceneKit,
 }: EffectControlsProps) {
   const update = (partial: Partial<CrtSettings>) => onChange({ ...settings, ...partial });
 
@@ -315,7 +324,10 @@ export function EffectControls({
         settings={settings}
         crtAffectText={crtAffectText}
         onApply={onApplyPreset}
+        onMutateLook={onMutateLook}
+        onRandomizeLook={onRandomizeLook}
       />
+      <SceneKitRack onApply={onApplySceneKit} />
     </div>
   );
 }

@@ -61,6 +61,70 @@ export const BUILTIN_LAYER_EFFECT_PRESETS: LayerEffectPreset[] = [
       createLayerEffect('scanWipe', { intensity: 0.8, speed: 0.7 }),
     ],
   },
+  {
+    id: 'haunted-titles',
+    name: 'Haunted Titles',
+    builtin: true,
+    effects: [
+      createLayerEffect('glitch', { intensity: 0.55, speed: 1.6 }),
+      createLayerEffect('rgbSplit', { intensity: 0.45, speed: 1.1 }),
+      createLayerEffect('blink', { intensity: 0.55, speed: 1.4 }),
+      createLayerEffect('static', { intensity: 0.3, speed: 2.2 }),
+    ],
+  },
+  {
+    id: 'terminal-boot',
+    name: 'Terminal Boot',
+    builtin: true,
+    effects: [
+      createLayerEffect('typewriter', { intensity: 1, speed: 0.55, envelopeEnd: 0.7 }),
+      createLayerEffect('scanWipe', { intensity: 0.65, speed: 0.6, envelopeEnd: 0.75 }),
+      createLayerEffect('shimmer', { intensity: 0.25, speed: 1.2 }),
+    ],
+  },
+  {
+    id: 'cyber-sting',
+    name: 'Cyber Sting',
+    builtin: true,
+    effects: [
+      createLayerEffect('colorCycle', { intensity: 0.7, speed: 0.8 }),
+      createLayerEffect('impact', {
+        intensity: 0.65,
+        speed: 1.4,
+        envelopeStart: 0.4,
+        envelopeEnd: 0.7,
+        fadeIn: 0.05,
+        fadeOut: 0.3,
+      }),
+      createLayerEffect('rgbSplit', {
+        intensity: 0.5,
+        speed: 1.5,
+        envelopeStart: 0.4,
+        envelopeEnd: 0.75,
+        fadeOut: 0.25,
+      }),
+    ],
+  },
+  {
+    id: 'grain-hold',
+    name: 'Grain Hold',
+    builtin: true,
+    effects: [
+      createLayerEffect('filmGrain', { intensity: 0.55, speed: 1.4 }),
+      createLayerEffect('holdTear', { intensity: 0.45, speed: 0.65 }),
+      createLayerEffect('afterimage', { intensity: 0.4, speed: 1 }),
+    ],
+  },
+  {
+    id: 'chroma-fade',
+    name: 'Chroma Fade',
+    builtin: true,
+    effects: [
+      createLayerEffect('chromaticPulse', { intensity: 0.55, speed: 1 }),
+      createLayerEffect('afterimage', { intensity: 0.5, speed: 0.9 }),
+      createLayerEffect('echo', { intensity: 0.25, speed: 0.8 }),
+    ],
+  },
 ];
 
 function readCustom(): LayerEffectPreset[] {

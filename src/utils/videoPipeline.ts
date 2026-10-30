@@ -6,6 +6,7 @@ import {
   seekVideo,
 } from './exportShared';
 import { createFrameSink, encodeFrameSequence, runFfmpegJob } from './ffmpegShared';
+import { normalizeExportRange } from './exportRange';
 import { getVideoBitrate, percentToScale } from './imageExport';
 import { MAX_VIDEO_EXPORT_FRAMES } from './mediaLoader';
 import { CrtRenderer } from './webgl';
@@ -16,6 +17,8 @@ export interface VideoExportSettings {
   optimizeVideo: boolean;
   keepAudio?: boolean;
   sourceFile?: File;
+  rangeStart?: number;
+  rangeEnd?: number;
 }
 
 function evenScaledSize(video: HTMLVideoElement, scalePercent: number) {
@@ -43,7 +46,11 @@ export async function exportVideo(
   const { width, height } = evenScaledSize(video, exportSettings.scalePercent);
   const duration = video.duration;
   const fps = exportFps(exportSettings);
-  const totalFrames = Math.min(Math.ceil(duration * fps), MAX_VIDEO_EXPORT_FRAMES);
+  const { start, end } = normalizeExportRange(exportSettings.rangeStart, exportSettings.rangeEnd);
+  const t0 = start * duration;
+  const t1 = Math.max(t0, end * duration);
+  const span = Math.max(0.001, t1 - t0);
+  const totalFrames = Math.min(Math.ceil(span * fps), MAX_VIDEO_EXPORT_FRAMES);
   const scaledCanvas = document.createElement('canvas');
   scaledCanvas.width = width;
   scaledCanvas.height = height;
@@ -62,7 +69,8 @@ export async function exportVideo(
     return await runFfmpegJob(async (ffmpeg) => {
       const sink = createFrameSink(ffmpeg);
       for (let i = 0; i < totalFrames; i++) {
-        const time = i / fps;
+        const time = Math.min(t0 + i / fps, duration);
+        if (time > t1 + 1e-4) break;
         onProgress({
           stage: `Processing frame ${i + 1}/${totalFrames}`,
           progress: (i / totalFrames) * 0.7,
@@ -85,6 +93,8 @@ export async function exportVideo(
         fps,
         optimize: exportSettings.optimizeVideo,
         audioSource: exportSettings.keepAudio ? exportSettings.sourceFile : undefined,
+        audioStart: t0,
+        audioDuration: span,
       });
       onProgress({ stage: 'Finalizing', progress: 0.95 });
       return blob;
@@ -141,15 +151,20 @@ export async function exportVideoViaMediaRecorder(
   const renderer = new CrtRenderer();
   const restoreVideo = captureVideoState(video);
   const duration = video.duration;
+  const { start, end } = normalizeExportRange(exportSettings.rangeStart, exportSettings.rangeEnd);
+  const t0 = start * duration;
+  const t1 = Math.max(t0, end * duration);
+  const clipDuration = Math.max(0.001, t1 - t0);
   const hasVideoFrameCallback = typeof video.requestVideoFrameCallback === 'function';
   let stopped = false;
 
   const drawFrame = () => {
     const time = video.currentTime;
     const timeline = duration > 0 ? time / duration : 0;
+    const elapsed = Math.max(0, time - t0);
     onProgress({
-      stage: `Recording ${time.toFixed(1)}s / ${duration.toFixed(1)}s`,
-      progress: Math.min(timeline, 0.99),
+      stage: `Recording ${elapsed.toFixed(1)}s / ${clipDuration.toFixed(1)}s`,
+      progress: Math.min(elapsed / clipDuration, 0.99),
     });
     const output = composeExportFrame(
       renderer, video, settings, textLayers, crtAffectText, time, timeline, false,
@@ -162,7 +177,7 @@ export async function exportVideoViaMediaRecorder(
   try {
     video.loop = false;
     video.muted = true;
-    await seekVideo(video, 0);
+    await seekVideo(video, t0);
 
     return await new Promise<Blob>((resolve, reject) => {
       const finish = () => {
@@ -172,6 +187,11 @@ export async function exportVideoViaMediaRecorder(
       };
       const tick = () => {
         if (stopped) return;
+        if (video.currentTime >= t1 - 0.001) {
+          drawFrame();
+          finish();
+          return;
+        }
         drawFrame();
         if (hasVideoFrameCallback) video.requestVideoFrameCallback(tick);
         else requestAnimationFrame(tick);

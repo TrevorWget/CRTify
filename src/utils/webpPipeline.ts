@@ -22,6 +22,8 @@ export interface WebpAnimExportSettings {
   frameSkip: number;
   /** Frames already have the CRT pass, text and bezel baked in. */
   preRendered?: boolean;
+  rangeStart?: number;
+  rangeEnd?: number;
 }
 
 export async function exportAnimatedWebp(
@@ -38,7 +40,12 @@ export async function exportAnimatedWebp(
     100,
     Math.max(50, Math.round(exportSettings.imageQuality * 100)),
   );
-  const selectedIndexes = selectFrameIndexes(frames.length, exportSettings.frameSkip);
+  const selectedIndexes = selectFrameIndexes(
+    frames.length,
+    exportSettings.frameSkip,
+    exportSettings.rangeStart,
+    exportSettings.rangeEnd,
+  );
   const usesTransparency =
     (!preRendered && settings.curvature > 0) || sourceHasTransparency(frames);
 

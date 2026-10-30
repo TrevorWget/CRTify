@@ -605,6 +605,43 @@ export function TextOverlayEditor({
           />
 
           <CollapsibleSection title="DISTORTION" storageKey="overlay-distortion">
+            <div className="control-row">
+              <span className="control-label">CRT stack</span>
+              <div className="segmented-control">
+                {(
+                  [
+                    { id: 'inherit', label: 'Inherit', value: null as boolean | null },
+                    { id: 'on', label: 'On', value: true },
+                    { id: 'off', label: 'Off', value: false },
+                  ] as const
+                ).map((option) => {
+                  const current =
+                    selected.crtAffect === undefined || selected.crtAffect === null
+                      ? null
+                      : selected.crtAffect;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={current === option.value ? 'active' : ''}
+                      title={
+                        option.id === 'inherit'
+                          ? 'Use the global CRT-affect overlays toggle'
+                          : option.id === 'on'
+                            ? 'Force full CRT processing on this layer'
+                            : 'Skip full CRT processing (warp/shader FX still apply)'
+                      }
+                      onClick={() => onUpdateLayer(selected.id, { crtAffect: option.value })}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <small className="control-hint">
+                Per-layer override for text, shapes, and stickers. Inherit follows the global toggle.
+              </small>
+            </div>
             <LayerSlider
               label="Warp"
               value={selected.warp}

@@ -7,10 +7,19 @@ interface PresetRackProps {
   settings: CrtSettings;
   crtAffectText: boolean;
   onApply: (preset: CrtPreset) => void;
+  onMutateLook?: () => void;
+  onRandomizeLook?: () => void;
   onPresetsChanged?: () => void;
 }
 
-export function PresetRack({ settings, crtAffectText, onApply, onPresetsChanged }: PresetRackProps) {
+export function PresetRack({
+  settings,
+  crtAffectText,
+  onApply,
+  onMutateLook,
+  onRandomizeLook,
+  onPresetsChanged,
+}: PresetRackProps) {
   const [presets, setPresets] = useState<CrtPreset[]>(() => listPresets());
   const [presetName, setPresetName] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -80,6 +89,30 @@ export function PresetRack({ settings, crtAffectText, onApply, onPresetsChanged 
             Save
           </button>
         </div>
+        {(onMutateLook || onRandomizeLook) && (
+          <div className="preset-mutate-row">
+            {onMutateLook && (
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={onMutateLook}
+                title="Nudge the current look’s CRT knobs for a nearby variation"
+              >
+                Mutate
+              </button>
+            )}
+            {onRandomizeLook && (
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={onRandomizeLook}
+                title="Stronger reshuffle of the current look while keeping its palette family"
+              >
+                Randomize
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </CollapsibleSection>
   );

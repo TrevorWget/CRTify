@@ -31,6 +31,8 @@ import {
   loadProjectFile,
   shareableLayers,
 } from './utils/projectIO';
+import { mutateLook, randomizeLook } from './utils/mutateLook';
+import { resolveSceneKit, type SceneKit } from './utils/sceneKits';
 import './styles/global.css';
 
 interface EditorSnapshot {
@@ -222,6 +224,36 @@ export default function App() {
         setSettings({ ...preset.settings });
         if (preset.crtAffectText !== undefined) setCrtAffectText(preset.crtAffectText);
       }
+    },
+    [pushHistory, compareEnabled, compareSlot],
+  );
+
+  const handleMutateLook = useCallback(() => {
+    pushHistory();
+    if (compareEnabled && compareSlot === 'B') setSettingsB((current) => mutateLook(current));
+    else setSettings((current) => mutateLook(current));
+  }, [pushHistory, compareEnabled, compareSlot]);
+
+  const handleRandomizeLook = useCallback(() => {
+    pushHistory();
+    if (compareEnabled && compareSlot === 'B') setSettingsB((current) => randomizeLook(current));
+    else setSettings((current) => randomizeLook(current));
+  }, [pushHistory, compareEnabled, compareSlot]);
+
+  const handleApplySceneKit = useCallback(
+    (kit: SceneKit) => {
+      pushHistory();
+      const resolved = resolveSceneKit(kit);
+      if (resolved.settings) {
+        if (compareEnabled && compareSlot === 'B') setSettingsB(resolved.settings);
+        else setSettings(resolved.settings);
+      }
+      if (resolved.crtAffectText !== undefined) {
+        if (compareEnabled && compareSlot === 'B') setCrtAffectTextB(resolved.crtAffectText);
+        else setCrtAffectText(resolved.crtAffectText);
+      }
+      setTextLayers(resolved.layers);
+      setSelectedLayerId(resolved.layers[0]?.id ?? null);
     },
     [pushHistory, compareEnabled, compareSlot],
   );
@@ -513,6 +545,7 @@ export default function App() {
           error={exportError}
           defaultName={exportDefaultName}
           queue={exportQueue}
+          timeline={getTimelinePosition(media, gifFrameIndex, videoTime)}
           onExport={handleExport}
           onClearFinished={clearFinishedExports}
           onClearError={clearExportError}
@@ -656,6 +689,9 @@ export default function App() {
               crtAffectText={activeCrtAffectText}
               onCrtAffectTextChange={handleCrtAffectTextChange}
               onApplyPreset={handleApplyPreset}
+              onMutateLook={handleMutateLook}
+              onRandomizeLook={handleRandomizeLook}
+              onApplySceneKit={handleApplySceneKit}
             />
             <ProjectDock
               onSaveProject={handleSaveProject}

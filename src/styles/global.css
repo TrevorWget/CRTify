@@ -2150,6 +2150,27 @@ label:focus-within {
   flex: none;
 }
 
+.preset-mutate-row,
+.export-range-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+}
+
+.export-range-slider {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+  color: #9c8663;
+  font-size: 0.72rem;
+}
+
+.export-range-slider span {
+  letter-spacing: 0.04em;
+}
+
 .audio-controls {
   display: flex;
   align-items: center;

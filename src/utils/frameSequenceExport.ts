@@ -11,6 +11,7 @@ import {
   yieldToBrowser,
 } from './exportShared';
 import { createFrameSink, encodeFrameSequence, runFfmpegJob } from './ffmpegShared';
+import { normalizeExportRange } from './exportRange';
 import { percentToScale } from './imageExport';
 import { CrtRenderer } from './webgl';
 
@@ -20,6 +21,8 @@ export interface FrameVideoExportSettings {
   optimizeVideo: boolean;
   /** Frames already have the CRT pass, text and bezel baked in. */
   preRendered?: boolean;
+  rangeStart?: number;
+  rangeEnd?: number;
 }
 
 /** Encode a GIF/WebP frame sequence to MP4 or WebM via ffmpeg.wasm. */
@@ -37,7 +40,12 @@ export async function exportFramesAsVideo(
   const scale = percentToScale(exportSettings.scalePercent);
   const width = Math.max(2, Math.round(sourceWidth * scale) & ~1);
   const height = Math.max(2, Math.round(sourceHeight * scale) & ~1);
-  const selected = selectFrameIndexes(frames.length, exportSettings.frameSkip);
+  const selected = selectFrameIndexes(
+    frames.length,
+    exportSettings.frameSkip,
+    exportSettings.rangeStart,
+    exportSettings.rangeEnd,
+  );
 
   let totalDelay = 0;
   for (let step = 0; step < selected.length; step++) totalDelay += spanDelay(frames, selected, step);
@@ -97,13 +105,25 @@ export async function rasterizeVideoToFrames(
   textLayers: TextLayer[],
   crtAffectText: boolean,
   onProgress: (progress: ExportProgress) => void,
-  options: { scalePercent: number; frameSkip: number; optimizeVideo: boolean; maxFrames?: number },
+  options: {
+    scalePercent: number;
+    frameSkip: number;
+    optimizeVideo: boolean;
+    maxFrames?: number;
+    rangeStart?: number;
+    rangeEnd?: number;
+  },
 ): Promise<GifFrame[]> {
   const scale = percentToScale(options.scalePercent);
   const baseFps = options.optimizeVideo ? 12 : 15;
   const fps = Math.max(1, baseFps / Math.max(1, options.frameSkip));
   const maxFrames = options.maxFrames ?? 300;
-  const totalFrames = Math.min(Math.ceil(video.duration * fps), maxFrames);
+  const duration = video.duration;
+  const { start, end } = normalizeExportRange(options.rangeStart, options.rangeEnd);
+  const t0 = start * duration;
+  const t1 = Math.max(t0, end * duration);
+  const span = Math.max(0.001, t1 - t0);
+  const totalFrames = Math.min(Math.ceil(span * fps), maxFrames);
   const delay = Math.round(1000 / fps);
   const scaled = document.createElement('canvas');
   const ctx = scaled.getContext('2d', { willReadFrequently: true })!;
@@ -113,13 +133,14 @@ export async function rasterizeVideoToFrames(
 
   try {
     for (let i = 0; i < totalFrames; i++) {
-      const time = i / fps;
+      const time = Math.min(t0 + i / fps, duration);
+      if (time > t1 + 1e-4) break;
       onProgress({
         stage: `Sampling video frame ${i + 1}/${totalFrames}`,
         progress: (i / totalFrames) * 0.5,
       });
       await seekVideo(video, time);
-      const timeline = video.duration > 0 ? time / video.duration : 0;
+      const timeline = duration > 0 ? time / duration : 0;
       const output = composeExportFrame(
         renderer, video, settings, textLayers, crtAffectText, time, timeline, true,
       );

@@ -98,17 +98,23 @@ interface EncodeOptions {
   optimize: boolean;
   /** Source media whose first audio stream is muxed into the output. */
   audioSource?: File;
+  /** Trim the audio input to the export in/out range, in seconds. */
+  audioStart?: number;
+  audioDuration?: number;
 }
 
 /** Encode the frames written through a FrameSink into an MP4/WebM blob. */
 export async function encodeFrameSequence(ffmpeg: FFmpeg, options: EncodeOptions): Promise<Blob> {
-  const { format, fps, optimize, audioSource } = options;
+  const { format, fps, optimize, audioSource, audioStart, audioDuration } = options;
   const args = ['-framerate', String(fps), '-i', 'frame%05d.jpg'];
 
   if (audioSource) {
     const ext = /\.([a-z0-9]+)$/i.exec(audioSource.name)?.[1]?.toLowerCase() ?? 'bin';
     const sourceName = `source.${ext}`;
     await ffmpeg.writeFile(sourceName, new Uint8Array(await audioSource.arrayBuffer()));
+    if (audioStart !== undefined && audioDuration !== undefined) {
+      args.push('-ss', String(audioStart), '-t', String(audioDuration));
+    }
     args.push('-i', sourceName, '-map', '0:v:0', '-map', '1:a:0?');
   }
 

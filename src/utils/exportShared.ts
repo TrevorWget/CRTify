@@ -1,5 +1,6 @@
 import type { CrtSettings, GifFrame, TextLayer } from '../types/crt';
 import { applyBezelChrome } from './bezelOverlay';
+import { selectFrameIndexes as selectRangedFrameIndexes } from './exportRange';
 import { drawTextLayers } from './textCompositor';
 import type { CrtRenderer } from './webgl';
 
@@ -32,20 +33,19 @@ export function imageDataToScratchCanvas(imageData: ImageData): HTMLCanvasElemen
   return scratchCanvas;
 }
 
-/** Indexes kept when exporting every Nth frame; the last frame is always kept. */
-export function selectFrameIndexes(frameCount: number, frameSkip: number): number[] {
-  const step = Math.max(1, Math.round(frameSkip));
-  const selected: number[] = [];
-  for (let i = 0; i < frameCount; i += step) selected.push(i);
-  if (frameCount > 0 && selected[selected.length - 1] !== frameCount - 1) {
-    selected.push(frameCount - 1);
-  }
-  return selected;
+/** Indexes kept inside the in/out range; the range's last frame is always kept. */
+export function selectFrameIndexes(
+  frameCount: number,
+  frameSkip: number,
+  rangeStart = 0,
+  rangeEnd = 1,
+): number[] {
+  return selectRangedFrameIndexes(frameCount, frameSkip, rangeStart, rangeEnd);
 }
 
-/** Combined delay of a kept frame and the skipped frames that follow it. */
+/** Combined delay of a kept frame and the skipped frames that follow it, stopping at the range end. */
 export function spanDelay(frames: GifFrame[], selected: number[], step: number): number {
-  const next = selected[step + 1] ?? frames.length;
+  const next = selected[step + 1] ?? Math.min(frames.length, selected[step] + 1);
   let delay = 0;
   for (let d = selected[step]; d < next; d++) delay += frames[d].delay;
   return delay;
