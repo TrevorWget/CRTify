@@ -1,8 +1,69 @@
 import { useCallback, useRef, useState } from 'react';
 import type { GifFrame, LoadedMedia } from '../types/crt';
 import { isPlayableMedia } from '../utils/animationMedia';
-import { loadMediaFile, revokeMedia } from '../utils/mediaLoader';
+import {
+  assertFrameBudget,
+  checkDimensions,
+  loadMediaFile,
+  MAX_GIF_FRAMES,
+  revokeMedia,
+} from '../utils/mediaLoader';
 import { loadImageElement } from '../utils/textCompositor';
+
+const BATCH_FRAME_DELAY = 200;
+
+async function decodeBatchFrames(files: File[]): Promise<LoadedMedia> {
+  if (files.length > MAX_GIF_FRAMES) {
+    throw new Error(`Batch has ${files.length} images. Maximum supported is ${MAX_GIF_FRAMES}.`);
+  }
+
+  const images: HTMLImageElement[] = [];
+  let width = 0;
+  let height = 0;
+  for (const file of files) {
+    const url = URL.createObjectURL(file);
+    try {
+      const image = await loadImageElement(url);
+      checkDimensions(image.width, image.height);
+      width = Math.max(width, image.width);
+      height = Math.max(height, image.height);
+      images.push(image);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+  if (images.length === 0) throw new Error('No valid images in batch');
+  assertFrameBudget(width, height, images.length, 'Batch');
+
+  // Letterbox every still onto a shared canvas so frame-sequence exports stay stable.
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('Failed to create canvas context');
+
+  const frames: GifFrame[] = images.map((image) => {
+    if (image.width === width && image.height === height) {
+      ctx.clearRect(0, 0, width, height);
+    } else {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, width, height);
+    }
+    const scale = Math.min(width / image.width, height / image.height);
+    const drawW = image.width * scale;
+    const drawH = image.height * scale;
+    ctx.drawImage(image, (width - drawW) / 2, (height - drawH) / 2, drawW, drawH);
+    return { imageData: ctx.getImageData(0, 0, width, height), delay: BATCH_FRAME_DELAY };
+  });
+
+  return {
+    type: 'gif',
+    width,
+    height,
+    gifFrames: frames,
+    fileName: `batch-${frames.length}-frames`,
+  };
+}
 
 export function useMediaLoader() {
   const [media, setMedia] = useState<LoadedMedia | null>(null);
@@ -11,121 +72,56 @@ export function useMediaLoader() {
   const [gifFrameIndex, setGifFrameIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const mediaRef = useRef<LoadedMedia | null>(null);
+  const loadTokenRef = useRef(0);
 
-  const loadFile = useCallback(async (file: File) => {
+  /** Load media, keeping only the most recent request if several overlap. */
+  const runLoad = useCallback(async (load: () => Promise<LoadedMedia>, fallbackError: string) => {
+    const token = ++loadTokenRef.current;
     setLoading(true);
     setError(null);
-    setIsPlaying(false);
-    setGifFrameIndex(0);
-
-    if (mediaRef.current) {
-      revokeMedia(mediaRef.current);
-    }
 
     try {
-      const loaded = await loadMediaFile(file);
+      const loaded = await load();
+      if (token !== loadTokenRef.current) {
+        revokeMedia(loaded);
+        return;
+      }
+      setIsPlaying(false);
+      setGifFrameIndex(0);
+      revokeMedia(mediaRef.current);
       mediaRef.current = loaded;
       setMedia(loaded);
-      if (isPlayableMedia(loaded)) {
-        setIsPlaying(true);
-      }
+      if (isPlayableMedia(loaded)) setIsPlaying(true);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load file';
-      setError(message);
-      setMedia(null);
-      mediaRef.current = null;
+      if (token !== loadTokenRef.current) return;
+      setError(err instanceof Error ? err.message : fallbackError);
     } finally {
-      setLoading(false);
+      if (token === loadTokenRef.current) setLoading(false);
     }
   }, []);
 
+  const loadFile = useCallback(
+    (file: File) => runLoad(() => loadMediaFile(file), 'Failed to load file'),
+    [runLoad],
+  );
+
+  const loadBatchFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      await runLoad(() => decodeBatchFrames(files), 'Failed to load batch');
+    },
+    [runLoad],
+  );
+
   const clearMedia = useCallback(() => {
-    if (mediaRef.current) {
-      revokeMedia(mediaRef.current);
-    }
+    loadTokenRef.current++;
+    revokeMedia(mediaRef.current);
     mediaRef.current = null;
     setMedia(null);
     setGifFrameIndex(0);
     setIsPlaying(false);
+    setLoading(false);
     setError(null);
-  }, []);
-
-  const loadBatchFiles = useCallback(async (files: File[]) => {
-    if (files.length === 0) return;
-    setLoading(true);
-    setError(null);
-    setIsPlaying(false);
-    setGifFrameIndex(0);
-
-    if (mediaRef.current) {
-      revokeMedia(mediaRef.current);
-    }
-
-    try {
-      const frames: GifFrame[] = [];
-      let width = 0;
-      let height = 0;
-      for (const file of files) {
-        const url = URL.createObjectURL(file);
-        try {
-          const image = await loadImageElement(url);
-          width = Math.max(width, image.width);
-          height = Math.max(height, image.height);
-          const canvas = document.createElement('canvas');
-          canvas.width = image.width;
-          canvas.height = image.height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) continue;
-          ctx.drawImage(image, 0, 0);
-          frames.push({
-            imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
-            delay: 200,
-          });
-        } finally {
-          URL.revokeObjectURL(url);
-        }
-      }
-      if (frames.length === 0) throw new Error('No valid images in batch');
-      // Normalize every still onto a shared canvas so GIF export stays stable.
-      const normalized: GifFrame[] = frames.map((frame) => {
-        if (frame.imageData.width === width && frame.imageData.height === height) return frame;
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d')!;
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, width, height);
-        const temp = document.createElement('canvas');
-        temp.width = frame.imageData.width;
-        temp.height = frame.imageData.height;
-        temp.getContext('2d')!.putImageData(frame.imageData, 0, 0);
-        const scale = Math.min(width / frame.imageData.width, height / frame.imageData.height);
-        const drawW = frame.imageData.width * scale;
-        const drawH = frame.imageData.height * scale;
-        ctx.drawImage(temp, (width - drawW) / 2, (height - drawH) / 2, drawW, drawH);
-        return {
-          imageData: ctx.getImageData(0, 0, width, height),
-          delay: frame.delay,
-        };
-      });
-      const loaded: LoadedMedia = {
-        type: 'gif',
-        width,
-        height,
-        gifFrames: normalized,
-        fileName: `batch-${normalized.length}-frames`,
-      };
-      mediaRef.current = loaded;
-      setMedia(loaded);
-      setIsPlaying(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load batch';
-      setError(message);
-      setMedia(null);
-      mediaRef.current = null;
-    } finally {
-      setLoading(false);
-    }
   }, []);
 
   const captureWebcam = useCallback(async () => {
@@ -136,6 +132,7 @@ export function useMediaLoader() {
     setLoading(true);
     setError(null);
     let stream: MediaStream | null = null;
+    let file: File | null = null;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: true });
       const video = document.createElement('video');
@@ -157,14 +154,14 @@ export function useMediaLoader() {
         canvas.toBlob(resolve, 'image/png'),
       );
       if (!blob) throw new Error('Failed to encode webcam frame');
-      await loadFile(new File([blob], 'webcam-capture.png', { type: 'image/png' }));
+      file = new File([blob], 'webcam-capture.png', { type: 'image/png' });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Webcam capture failed';
-      setError(message);
+      setError(err instanceof Error ? err.message : 'Webcam capture failed');
+      setLoading(false);
     } finally {
       stream?.getTracks().forEach((track) => track.stop());
-      setLoading(false);
     }
+    if (file) await loadFile(file);
   }, [loadFile]);
 
   return {

@@ -25,23 +25,16 @@ function detectMediaType(file: File): MediaType | 'webp-candidate' {
 
 function isAnimatedWebPBuffer(buffer: ArrayBuffer): boolean {
   const bytes = new Uint8Array(buffer);
-  if (bytes.length < 16) return false;
-  const header = String.fromCharCode(...bytes.subarray(0, 4));
-  const fourcc = String.fromCharCode(...bytes.subarray(8, 12));
-  if (header !== 'RIFF' || fourcc !== 'WEBP') return false;
+  if (bytes.length < 21) return false;
+  const fourcc = (offset: number) => String.fromCharCode(...bytes.subarray(offset, offset + 4));
+  if (fourcc(0) !== 'RIFF' || fourcc(8) !== 'WEBP') return false;
+  // Animated files must use the extended (VP8X) header with the animation flag set.
+  return fourcc(12) === 'VP8X' && (bytes[20] & 0x02) !== 0;
+}
 
-  // ANIM chunk marks an animated WebP container.
-  for (let i = 12; i < bytes.length - 3; i++) {
-    if (
-      bytes[i] === 0x41 &&
-      bytes[i + 1] === 0x4e &&
-      bytes[i + 2] === 0x49 &&
-      bytes[i + 3] === 0x4d
-    ) {
-      return true;
-    }
-  }
-  return false;
+/** Browsers play GIF delays of 10ms or less at 100ms; match them so previews and exports agree. */
+function normalizeGifDelay(delay: number | undefined): number {
+  return !delay || delay <= 10 ? 100 : delay;
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -66,7 +59,7 @@ function loadVideo(url: string): Promise<HTMLVideoElement> {
   });
 }
 
-function assertFrameBudget(width: number, height: number, frameCount: number, label: string) {
+export function assertFrameBudget(width: number, height: number, frameCount: number, label: string) {
   if (frameCount > MAX_GIF_FRAMES) {
     throw new Error(`${label} has ${frameCount} frames. Maximum supported is ${MAX_GIF_FRAMES}.`);
   }
@@ -82,6 +75,7 @@ function assertFrameBudget(width: number, height: number, frameCount: number, la
 
 async function decodeGif(buffer: ArrayBuffer): Promise<GifFrame[]> {
   const gif = parseGIF(buffer);
+  checkDimensions(gif.lsd.width, gif.lsd.height);
   assertFrameBudget(gif.lsd.width, gif.lsd.height, gif.frames.length, 'GIF');
 
   const frames = decompressFrames(gif, true);
@@ -89,44 +83,35 @@ async function decodeGif(buffer: ArrayBuffer): Promise<GifFrame[]> {
   const canvas = document.createElement('canvas');
   canvas.width = gif.lsd.width;
   canvas.height = gif.lsd.height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Failed to create canvas context');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const patchCanvas = document.createElement('canvas');
+  const patchCtx = patchCanvas.getContext('2d');
+  if (!ctx || !patchCtx) throw new Error('Failed to create canvas context');
 
   const result: GifFrame[] = [];
 
   for (const frame of frames) {
-    const imageData = new ImageData(
-      new Uint8ClampedArray(frame.patch),
-      frame.dims.width,
-      frame.dims.height,
-    );
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = frame.dims.width;
-    tempCanvas.height = frame.dims.height;
-    const tempCtx = tempCanvas.getContext('2d')!;
-    tempCtx.putImageData(imageData, 0, 0);
+    const { left, top, width, height } = frame.dims;
+    // Disposal 3 restores the canvas to how it looked before this frame was drawn.
+    const restoreTo =
+      frame.disposalType === 3 ? ctx.getImageData(0, 0, canvas.width, canvas.height) : null;
 
-    ctx.drawImage(tempCanvas, frame.dims.left, frame.dims.top);
+    if (patchCanvas.width !== width || patchCanvas.height !== height) {
+      patchCanvas.width = width;
+      patchCanvas.height = height;
+    }
+    patchCtx.putImageData(new ImageData(new Uint8ClampedArray(frame.patch), width, height), 0, 0);
+    ctx.drawImage(patchCanvas, left, top);
 
-    const fullFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
     result.push({
-      imageData: new ImageData(
-        new Uint8ClampedArray(fullFrame.data),
-        fullFrame.width,
-        fullFrame.height,
-      ),
-      delay: frame.delay ?? 100,
+      imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
+      delay: normalizeGifDelay(frame.delay),
     });
 
     if (frame.disposalType === 2) {
-      ctx.clearRect(
-        frame.dims.left,
-        frame.dims.top,
-        frame.dims.width,
-        frame.dims.height,
-      );
-    } else if (frame.disposalType === 3) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(left, top, width, height);
+    } else if (restoreTo) {
+      ctx.putImageData(restoreTo, 0, 0);
     }
   }
 
@@ -159,6 +144,7 @@ async function decodeAnimatedWebPWithImageDecoder(buffer: ArrayBuffer): Promise<
       const width = image.displayWidth;
       const height = image.displayHeight;
       if (i === 0) {
+        checkDimensions(width, height);
         assertFrameBudget(width, height, track.frameCount, 'WebP');
         canvas.width = width;
         canvas.height = height;
@@ -166,15 +152,10 @@ async function decodeAnimatedWebPWithImageDecoder(buffer: ArrayBuffer): Promise<
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(image, 0, 0);
-      const fullFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
       // VideoFrame.duration is in microseconds.
       const delayMs = Math.max(10, Math.round((image.duration ?? 100_000) / 1000));
       result.push({
-        imageData: new ImageData(
-          new Uint8ClampedArray(fullFrame.data),
-          fullFrame.width,
-          fullFrame.height,
-        ),
+        imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
         delay: delayMs,
       });
       image.close();
@@ -194,6 +175,7 @@ async function decodeAnimatedWebPWithWasm(buffer: ArrayBuffer): Promise<GifFrame
 
   const width = frames[0].width;
   const height = frames[0].height;
+  checkDimensions(width, height);
   assertFrameBudget(width, height, frames.length, 'WebP');
 
   return frames.map((frame) => ({
@@ -212,7 +194,7 @@ async function decodeAnimatedWebP(buffer: ArrayBuffer): Promise<GifFrame[]> {
   return decodeAnimatedWebPWithWasm(buffer);
 }
 
-function checkDimensions(width: number, height: number) {
+export function checkDimensions(width: number, height: number) {
   if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
     throw new Error(`Maximum resolution is ${MAX_DIMENSION}×${MAX_DIMENSION}.`);
   }
@@ -223,6 +205,19 @@ export async function loadMediaFile(file: File): Promise<LoadedMedia> {
   if (!type) throw new Error('Unsupported file type. Use images, GIFs, WebP, or videos.');
 
   const objectUrl = URL.createObjectURL(file);
+  try {
+    return await loadMediaFromUrl(file, type, objectUrl);
+  } catch (err) {
+    URL.revokeObjectURL(objectUrl);
+    throw err;
+  }
+}
+
+async function loadMediaFromUrl(
+  file: File,
+  type: NonNullable<ReturnType<typeof detectMediaType>>,
+  objectUrl: string,
+): Promise<LoadedMedia> {
   const meta = { sourceFile: file, fileName: file.name };
 
   if (type === 'webp-candidate') {
@@ -256,7 +251,12 @@ export async function loadMediaFile(file: File): Promise<LoadedMedia> {
   }
 
   const video = await loadVideo(objectUrl);
-  checkDimensions(video.videoWidth, video.videoHeight);
+  try {
+    checkDimensions(video.videoWidth, video.videoHeight);
+  } catch (err) {
+    releaseVideo(video);
+    throw err;
+  }
   return {
     type,
     width: video.videoWidth,
@@ -267,21 +267,14 @@ export async function loadMediaFile(file: File): Promise<LoadedMedia> {
   };
 }
 
-export function imageDataToCanvas(imageData: ImageData): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = imageData.width;
-  canvas.height = imageData.height;
-  const ctx = canvas.getContext('2d')!;
-  ctx.putImageData(imageData, 0, 0);
-  return canvas;
+function releaseVideo(video: HTMLVideoElement) {
+  video.onerror = null;
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
 }
 
 export function revokeMedia(media: LoadedMedia | null) {
-  if (media?.objectUrl) {
-    URL.revokeObjectURL(media.objectUrl);
-  }
-  if (media?.video) {
-    media.video.pause();
-    media.video.src = '';
-  }
+  if (media?.video) releaseVideo(media.video);
+  if (media?.objectUrl) URL.revokeObjectURL(media.objectUrl);
 }

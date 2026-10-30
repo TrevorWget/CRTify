@@ -14,6 +14,19 @@ export function isPlayableMedia(media: LoadedMedia | null | undefined): boolean 
   return isFrameSequenceMedia(media) || media?.type === 'video';
 }
 
+/** Shader clock (seconds) for a frame of a GIF / animated WebP sequence. */
+export function frameSequenceTime(frameIndex: number): number {
+  return frameIndex * 0.1;
+}
+
+/** Shader clock the preview uses, so still exports match what is on screen. */
+export function getPreviewTime(media: LoadedMedia | null | undefined, gifFrameIndex: number): number {
+  if (!media) return 0;
+  if (isFrameSequenceMedia(media)) return frameSequenceTime(gifFrameIndex);
+  if (media.type === 'video' && media.video) return media.video.currentTime;
+  return 0;
+}
+
 /** Normalized playhead position (0–1) used to sample layer keyframes. */
 export function getTimelinePosition(
   media: LoadedMedia | null | undefined,

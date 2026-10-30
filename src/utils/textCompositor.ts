@@ -1,7 +1,7 @@
 import type { CrtSettings, TextLayer } from '../types/crt';
 import { resolveLayerForRender } from './keyframes';
 import { resolveEffectText } from './layerEffects';
-import { applyLayerCanvasEffects } from './layerCanvasEffects';
+import { applyLayerCanvasEffects, pruneLayerBuffers } from './layerCanvasEffects';
 import { getLayerDistortionOptions, hasLayerDistortion } from './layerShaderEffects';
 import { drawShapeLayer } from './shapeDrawing';
 import { CrtRenderer } from './webgl';
@@ -121,7 +121,7 @@ function getTextEffectSettings(
 }
 
 function layerIsDrawable(layer: TextLayer): boolean {
-  if (layer.kind === 'image') return Boolean(layer.imageElement || layer.imageUrl);
+  if (layer.kind === 'image') return Boolean(layer.imageElement);
   if (layer.kind === 'shape') return true;
   return Boolean(layer.text.trim());
 }
@@ -146,6 +146,7 @@ export function drawTextLayers(
     layerCanvas.width = width;
     layerCanvas.height = height;
   }
+  pruneLayerBuffers(layers);
 
   for (const rawLayer of layers) {
     const layer = resolveLayerForRender(rawLayer, timeline);

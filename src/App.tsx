@@ -27,7 +27,9 @@ import {
   buildProject,
   copyShareLink,
   downloadProject,
+  hydrateImageLayers,
   loadProjectFile,
+  shareableLayers,
 } from './utils/projectIO';
 import { mutateLook, randomizeLook } from './utils/mutateLook';
 import { resolveSceneKit, type SceneKit } from './utils/sceneKits';
@@ -35,8 +37,21 @@ import './styles/global.css';
 
 interface EditorSnapshot {
   settings: CrtSettings;
+  settingsB: CrtSettings;
   textLayers: TextLayer[];
   crtAffectText: boolean;
+  crtAffectTextB: boolean;
+}
+
+const HISTORY_LIMIT = 80;
+/** Edits to the same control closer together than this collapse into one undo step. */
+const HISTORY_COALESCE_MS = 600;
+
+function changedKeys<T extends object>(prev: T, next: Partial<T>): string {
+  return (Object.keys(next) as Array<keyof T>)
+    .filter((key) => prev[key] !== next[key])
+    .sort()
+    .join(',');
 }
 
 export default function App() {
@@ -53,8 +68,10 @@ export default function App() {
   const exportQueueBusy = useRef(false);
   const historyRef = useRef<EditorSnapshot[]>([]);
   const redoRef = useRef<EditorSnapshot[]>([]);
+  const lastEditRef = useRef<{ key: string; at: number } | null>(null);
   const [historyCount, setHistoryCount] = useState(0);
   const [redoCount, setRedoCount] = useState(0);
+  const [appError, setAppError] = useState<string | null>(null);
 
   const {
     media,
@@ -105,24 +122,43 @@ export default function App() {
     return () => window.removeEventListener('paste', onPaste);
   }, [loadFile]);
 
-  const pushHistory = useCallback(() => {
-    historyRef.current = [
-      ...historyRef.current.slice(-79),
-      {
-        settings: { ...settings },
-        textLayers: textLayers.map((layer) => ({ ...layer })),
-        crtAffectText,
-      },
-    ];
-    redoRef.current = [];
-    setHistoryCount(historyRef.current.length);
-    setRedoCount(0);
-  }, [settings, textLayers, crtAffectText]);
+  const takeSnapshot = useCallback(
+    (): EditorSnapshot => ({
+      settings: { ...settings },
+      settingsB: { ...settingsB },
+      textLayers: textLayers.map((layer) => ({ ...layer })),
+      crtAffectText,
+      crtAffectTextB,
+    }),
+    [settings, settingsB, textLayers, crtAffectText, crtAffectTextB],
+  );
+
+  /**
+   * Record an undo point. Pass a `key` for continuous edits (slider drags, typing,
+   * canvas drags) so a burst of changes to the same control becomes one step.
+   */
+  const pushHistory = useCallback(
+    (key?: string) => {
+      const now = performance.now();
+      const last = lastEditRef.current;
+      lastEditRef.current = key ? { key, at: now } : null;
+      if (key && last?.key === key && now - last.at < HISTORY_COALESCE_MS) return;
+
+      historyRef.current = [...historyRef.current.slice(-(HISTORY_LIMIT - 1)), takeSnapshot()];
+      redoRef.current = [];
+      setHistoryCount(historyRef.current.length);
+      setRedoCount(0);
+    },
+    [takeSnapshot],
+  );
 
   const applySnapshot = useCallback((snapshot: EditorSnapshot) => {
+    lastEditRef.current = null;
     setSettings(snapshot.settings);
+    setSettingsB(snapshot.settingsB);
     setTextLayers(snapshot.textLayers);
     setCrtAffectText(snapshot.crtAffectText);
+    setCrtAffectTextB(snapshot.crtAffectTextB);
     setSelectedLayerId((current) =>
       current && snapshot.textLayers.some((layer) => layer.id === current) ? current : null,
     );
@@ -131,34 +167,20 @@ export default function App() {
   const handleUndo = useCallback(() => {
     const snapshot = historyRef.current.pop();
     if (!snapshot) return;
-    redoRef.current = [
-      ...redoRef.current,
-      {
-        settings: { ...settings },
-        textLayers: textLayers.map((layer) => ({ ...layer })),
-        crtAffectText,
-      },
-    ];
+    redoRef.current = [...redoRef.current, takeSnapshot()];
     applySnapshot(snapshot);
     setHistoryCount(historyRef.current.length);
     setRedoCount(redoRef.current.length);
-  }, [settings, textLayers, crtAffectText, applySnapshot]);
+  }, [takeSnapshot, applySnapshot]);
 
   const handleRedo = useCallback(() => {
     const snapshot = redoRef.current.pop();
     if (!snapshot) return;
-    historyRef.current = [
-      ...historyRef.current,
-      {
-        settings: { ...settings },
-        textLayers: textLayers.map((layer) => ({ ...layer })),
-        crtAffectText,
-      },
-    ];
+    historyRef.current = [...historyRef.current, takeSnapshot()];
     applySnapshot(snapshot);
     setHistoryCount(historyRef.current.length);
     setRedoCount(redoRef.current.length);
-  }, [settings, textLayers, crtAffectText, applySnapshot]);
+  }, [takeSnapshot, applySnapshot]);
 
   const handleResetAll = useCallback(() => {
     pushHistory();
@@ -172,13 +194,15 @@ export default function App() {
   const activeCrtAffectText =
     compareEnabled && compareSlot === 'B' ? crtAffectTextB : crtAffectText;
 
+  const editingB = compareEnabled && compareSlot === 'B';
+
   const handleSettingsChange = useCallback(
     (next: CrtSettings) => {
-      pushHistory();
-      if (compareEnabled && compareSlot === 'B') setSettingsB(next);
+      pushHistory(`${editingB ? 'B' : 'A'}:settings:${changedKeys(activeSettings, next)}`);
+      if (editingB) setSettingsB(next);
       else setSettings(next);
     },
-    [pushHistory, compareEnabled, compareSlot],
+    [pushHistory, editingB, activeSettings],
   );
 
   const handleCrtAffectTextChange = useCallback(
@@ -250,10 +274,10 @@ export default function App() {
 
   const handleAddSticker = useCallback(
     async (file: File) => {
-      pushHistory();
       const url = URL.createObjectURL(file);
       try {
         const imageElement = await loadImageElement(url);
+        pushHistory();
         const layer = createTextLayer({
           kind: 'image',
           text: file.name.replace(/\.[^.]+$/, ''),
@@ -270,6 +294,7 @@ export default function App() {
         setSelectedLayerId(layer.id);
       } catch {
         URL.revokeObjectURL(url);
+        setAppError(`Could not load ${file.name} as a sticker`);
       }
     },
     [pushHistory],
@@ -277,7 +302,7 @@ export default function App() {
 
   const handleUpdateLayer = useCallback(
     (id: string, partial: Partial<TextLayer>) => {
-      pushHistory();
+      pushHistory(`layer:${id}:${Object.keys(partial).sort().join(',')}`);
       setTextLayers((prev) => prev.map((l) => (l.id === id ? { ...l, ...partial } : l)));
     },
     [pushHistory],
@@ -385,24 +410,27 @@ export default function App() {
   const handleLoadProject = useCallback(async (file: File) => {
     try {
       const project = await loadProjectFile(file);
+      const layers = await hydrateImageLayers(project.textLayers);
       pushHistory();
       setSettings(project.settings);
       setCrtAffectText(project.crtAffectText);
-      setTextLayers(project.textLayers);
+      setTextLayers(layers);
       setSelectedLayerId(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load project';
-      clearLoadError();
-      console.error(message);
+      setAppError(err instanceof Error ? err.message : 'Failed to load project');
     }
-  }, [pushHistory, clearLoadError]);
+  }, [pushHistory]);
 
   const handleCopyShareLink = useCallback(async () => {
-    await copyShareLink({
-      settings,
-      crtAffectText,
-      textLayers: textLayers.map(({ imageElement: _ignored, ...rest }) => rest),
-    });
+    try {
+      await copyShareLink({
+        settings,
+        crtAffectText,
+        textLayers: shareableLayers(textLayers),
+      });
+    } catch (err) {
+      setAppError(err instanceof Error ? err.message : 'Could not copy share link');
+    }
   }, [settings, crtAffectText, textLayers]);
 
   const handleExport = useCallback(
@@ -413,18 +441,12 @@ export default function App() {
         label: `${format.toUpperCase()} · ${exportConfig.filename || 'export'}`,
         format,
         options: exportConfig,
+        editor: { settings, textLayers, crtAffectText, gifFrameIndex },
         status: 'queued',
       };
       setExportQueue((prev) => [...prev, item]);
     },
-    [media],
-  );
-
-  const handleEnqueueRecipe = useCallback(
-    (format: ExportFormat, exportConfig: ExportOptionsConfig) => {
-      handleExport(format, exportConfig);
-    },
-    [handleExport],
+    [media, settings, textLayers, crtAffectText, gifFrameIndex],
   );
 
   const clearFinishedExports = useCallback(() => {
@@ -437,16 +459,15 @@ export default function App() {
     if (!nextJob) return;
 
     exportQueueBusy.current = true;
+    setIsPlaying(false);
+    media.video?.pause();
     setExportQueue((prev) =>
       prev.map((item) => (item.id === nextJob.id ? { ...item, status: 'running' } : item)),
     );
 
     void exportMedia(nextJob.format, {
       media,
-      settings,
-      textLayers,
-      crtAffectText,
-      gifFrameIndex,
+      ...nextJob.editor,
       exportConfig: nextJob.options,
     })
       .then(() => {
@@ -465,16 +486,7 @@ export default function App() {
       .finally(() => {
         exportQueueBusy.current = false;
       });
-  }, [
-    exportQueue,
-    exporting,
-    media,
-    settings,
-    textLayers,
-    crtAffectText,
-    gifFrameIndex,
-    exportMedia,
-  ]);
+  }, [exportQueue, exporting, media, exportMedia, setIsPlaying]);
 
   const exportDefaultName = defaultExportFilename(textLayers[0]?.text);
   const systemStatus = exporting
@@ -535,7 +547,6 @@ export default function App() {
           queue={exportQueue}
           timeline={getTimelinePosition(media, gifFrameIndex, videoTime)}
           onExport={handleExport}
-          onEnqueue={handleEnqueueRecipe}
           onClearFinished={clearFinishedExports}
           onClearError={clearExportError}
         />
@@ -596,6 +607,7 @@ export default function App() {
             onTogglePlay={() => setIsPlaying((p) => !p)}
             onGifFrameChange={setGifFrameIndex}
             onVideoTimeChange={setVideoTime}
+            playbackLocked={exporting}
           />
             <div className="faceplate-footer" aria-hidden="true">
               <span>◉ POWER</span>
@@ -690,10 +702,17 @@ export default function App() {
         </aside>
       </main>
 
-      {(loadError) && (
+      {(loadError || appError) && (
         <div className="error-toast global-error">
-          <span>{loadError}</span>
-          <button type="button" className="btn-icon" onClick={clearLoadError}>
+          <span>{loadError ?? appError}</span>
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={() => {
+              clearLoadError();
+              setAppError(null);
+            }}
+          >
             ×
           </button>
         </div>

@@ -1,34 +1,28 @@
 import type { CrtSettings, ExportProgress, GifFrame, TextLayer } from '../types/crt';
-import { applyBezelChrome } from './bezelOverlay';
+import { frameSequenceTime } from './animationMedia';
+import {
+  canvasToJpegBytes,
+  captureVideoState,
+  composeExportFrame,
+  imageDataToScratchCanvas,
+  seekVideo,
+  selectFrameIndexes,
+  spanDelay,
+  yieldToBrowser,
+} from './exportShared';
+import { createFrameSink, encodeFrameSequence, runFfmpegJob } from './ffmpegShared';
+import { normalizeExportRange } from './exportRange';
 import { percentToScale } from './imageExport';
-import { normalizeExportRange, selectFrameIndexes } from './exportRange';
-import { imageDataToCanvas } from './mediaLoader';
-import { drawTextLayers } from './textCompositor';
 import { CrtRenderer } from './webgl';
-import { getFFmpeg } from './ffmpegShared';
 
 export interface FrameVideoExportSettings {
   scalePercent: number;
   frameSkip: number;
   optimizeVideo: boolean;
+  /** Frames already have the CRT pass, text and bezel baked in. */
+  preRendered?: boolean;
   rangeStart?: number;
   rangeEnd?: number;
-}
-
-function canvasToJpegBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      async (blob) => {
-        if (!blob) {
-          reject(new Error('Frame encode failed'));
-          return;
-        }
-        resolve(new Uint8Array(await blob.arrayBuffer()));
-      },
-      'image/jpeg',
-      0.92,
-    );
-  });
 }
 
 /** Encode a GIF/WebP frame sequence to MP4 or WebM via ffmpeg.wasm. */
@@ -41,126 +35,70 @@ export async function exportFramesAsVideo(
   onProgress: (progress: ExportProgress) => void,
   exportSettings: FrameVideoExportSettings,
 ): Promise<Blob> {
-  const renderer = new CrtRenderer();
   const sourceWidth = frames[0].imageData.width;
   const sourceHeight = frames[0].imageData.height;
   const scale = percentToScale(exportSettings.scalePercent);
   const width = Math.max(2, Math.round(sourceWidth * scale) & ~1);
   const height = Math.max(2, Math.round(sourceHeight * scale) & ~1);
-  const frameSkip = Math.max(1, Math.round(exportSettings.frameSkip));
   const selected = selectFrameIndexes(
     frames.length,
-    frameSkip,
+    exportSettings.frameSkip,
     exportSettings.rangeStart,
     exportSettings.rangeEnd,
   );
-  if (selected.length === 0) selected.push(0);
 
-  let totalDurationMs = 0;
-  for (const frame of frames) totalDurationMs += Math.max(10, frame.delay);
-  const avgDelay =
-    selected.length > 1
-      ? Math.max(
-          20,
-          Math.round(
-            selected.reduce((sum, index, step) => {
-              const next = selected[step + 1] ?? frames.length;
-              let delay = 0;
-              for (let d = index; d < next; d++) delay += frames[d].delay;
-              return sum + delay;
-            }, 0) / selected.length,
-          ),
-        )
-      : 100;
+  let totalDelay = 0;
+  for (let step = 0; step < selected.length; step++) totalDelay += spanDelay(frames, selected, step);
+  const avgDelay = selected.length > 1 ? Math.max(20, Math.round(totalDelay / selected.length)) : 100;
   const fps = Math.max(1, Math.round(1000 / avgDelay));
 
-  const frameCanvas = document.createElement('canvas');
-  frameCanvas.width = sourceWidth;
-  frameCanvas.height = sourceHeight;
-  const frameCtx = frameCanvas.getContext('2d')!;
   const scaledCanvas = document.createElement('canvas');
   scaledCanvas.width = width;
   scaledCanvas.height = height;
   const scaledCtx = scaledCanvas.getContext('2d')!;
 
   onProgress({ stage: 'Loading ffmpeg', progress: 0 });
-  const ffmpeg = await getFFmpeg();
-  const ext = format === 'mp4' ? 'mp4' : 'webm';
-  const mimeType = format === 'mp4' ? 'video/mp4' : 'video/webm';
+  const renderer = exportSettings.preRendered ? null : new CrtRenderer();
 
   try {
-    for (let step = 0; step < selected.length; step++) {
-      const index = selected[step];
-      onProgress({
-        stage: `Processing frame ${step + 1}/${selected.length}`,
-        progress: (step / selected.length) * 0.7,
+    return await runFfmpegJob(async (ffmpeg) => {
+      const sink = createFrameSink(ffmpeg);
+      for (let step = 0; step < selected.length; step++) {
+        const index = selected[step];
+        onProgress({
+          stage: `Processing frame ${step + 1}/${selected.length}`,
+          progress: (step / selected.length) * 0.7,
+        });
+
+        const frame = frames[index].imageData;
+        const timeline = frames.length <= 1 ? 0 : index / (frames.length - 1);
+        const output = renderer
+          ? composeExportFrame(
+              renderer, frame, settings, textLayers, crtAffectText,
+              frameSequenceTime(index), timeline, false,
+            )
+          : imageDataToScratchCanvas(frame);
+        scaledCtx.fillStyle = '#000';
+        scaledCtx.fillRect(0, 0, width, height);
+        scaledCtx.drawImage(output, 0, 0, width, height);
+        await sink.write(await canvasToJpegBytes(scaledCanvas));
+      }
+
+      onProgress({ stage: 'Encoding video', progress: 0.8 });
+      const blob = await encodeFrameSequence(ffmpeg, {
+        format,
+        fps,
+        optimize: exportSettings.optimizeVideo,
       });
-
-      frameCtx.clearRect(0, 0, sourceWidth, sourceHeight);
-      frameCtx.putImageData(frames[index].imageData, 0, 0);
-      const timeline = frames.length <= 1 ? 0 : index / (frames.length - 1);
-      const crtCanvas = renderer.renderFrame(frameCanvas, settings, index * 0.1, {
-        preserveAlpha: false,
-      });
-      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
-      let output: HTMLCanvasElement = crtCanvas;
-      if (settings.showBezel) output = applyBezelChrome(output);
-      scaledCtx.fillStyle = '#000';
-      scaledCtx.fillRect(0, 0, width, height);
-      scaledCtx.drawImage(output, 0, 0, width, height);
-      const bytes = await canvasToJpegBytes(scaledCanvas);
-      await ffmpeg.writeFile(`frame${String(step).padStart(5, '0')}.jpg`, bytes);
-    }
-
-    onProgress({ stage: 'Encoding video', progress: 0.8 });
-    if (format === 'mp4') {
-      await ffmpeg.exec([
-        '-framerate',
-        String(fps),
-        '-i',
-        'frame%05d.jpg',
-        '-c:v',
-        'libx264',
-        '-pix_fmt',
-        'yuv420p',
-        '-crf',
-        exportSettings.optimizeVideo ? '28' : '23',
-        '-y',
-        'output.mp4',
-      ]);
-    } else {
-      await ffmpeg.exec([
-        '-framerate',
-        String(fps),
-        '-i',
-        'frame%05d.jpg',
-        '-c:v',
-        'libvpx-vp9',
-        '-b:v',
-        '0',
-        '-crf',
-        exportSettings.optimizeVideo ? '32' : '28',
-        '-y',
-        'output.webm',
-      ]);
-    }
-
-    const outputData = await ffmpeg.readFile(`output.${ext}`);
-    const bytes =
-      outputData instanceof Uint8Array
-        ? new Uint8Array(outputData)
-        : new TextEncoder().encode(outputData);
-
-    for (let step = 0; step < selected.length; step++) {
-      await ffmpeg.deleteFile(`frame${String(step).padStart(5, '0')}.jpg`);
-    }
-    await ffmpeg.deleteFile(`output.${ext}`);
-    return new Blob([bytes], { type: mimeType });
+      onProgress({ stage: 'Finalizing', progress: 0.95 });
+      return blob;
+    });
   } finally {
-    renderer.destroy();
+    renderer?.destroy();
   }
 }
 
+/** Sample a video into finished (CRT + text + bezel) frames for GIF/WebP encoding. */
 export async function rasterizeVideoToFrames(
   video: HTMLVideoElement,
   settings: CrtSettings,
@@ -176,10 +114,7 @@ export async function rasterizeVideoToFrames(
     rangeEnd?: number;
   },
 ): Promise<GifFrame[]> {
-  const renderer = new CrtRenderer();
   const scale = percentToScale(options.scalePercent);
-  const width = Math.max(1, Math.round(video.videoWidth * scale));
-  const height = Math.max(1, Math.round(video.videoHeight * scale));
   const baseFps = options.optimizeVideo ? 12 : 15;
   const fps = Math.max(1, baseFps / Math.max(1, options.frameSkip));
   const maxFrames = options.maxFrames ?? 300;
@@ -191,97 +126,73 @@ export async function rasterizeVideoToFrames(
   const totalFrames = Math.min(Math.ceil(span * fps), maxFrames);
   const delay = Math.round(1000 / fps);
   const scaled = document.createElement('canvas');
-  scaled.width = width;
-  scaled.height = height;
-  const ctx = scaled.getContext('2d')!;
+  const ctx = scaled.getContext('2d', { willReadFrequently: true })!;
   const frames: GifFrame[] = [];
+  const renderer = new CrtRenderer();
+  const restoreVideo = captureVideoState(video);
 
   try {
     for (let i = 0; i < totalFrames; i++) {
-      const time = t0 + i / fps;
+      const time = Math.min(t0 + i / fps, duration);
       if (time > t1 + 1e-4) break;
       onProgress({
         stage: `Sampling video frame ${i + 1}/${totalFrames}`,
-        progress: (i / totalFrames) * 0.55,
+        progress: (i / totalFrames) * 0.5,
       });
-      await seekVideo(video, Math.min(time, duration));
-      const timeline = duration > 0 ? Math.min(time, duration) / duration : 0;
-      const crtCanvas = renderer.renderFrame(video, settings, time, { preserveAlpha: true });
-      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, timeline);
-      let output: HTMLCanvasElement = crtCanvas;
-      if (settings.showBezel) output = applyBezelChrome(output);
-      ctx.clearRect(0, 0, width, height);
-      ctx.drawImage(output, 0, 0, width, height);
-      frames.push({
-        imageData: new ImageData(
-          new Uint8ClampedArray(ctx.getImageData(0, 0, width, height).data),
-          width,
-          height,
-        ),
-        delay,
-      });
+      await seekVideo(video, time);
+      const timeline = duration > 0 ? time / duration : 0;
+      const output = composeExportFrame(
+        renderer, video, settings, textLayers, crtAffectText, time, timeline, true,
+      );
+      if (i === 0) {
+        scaled.width = Math.max(1, Math.round(output.width * scale));
+        scaled.height = Math.max(1, Math.round(output.height * scale));
+      }
+      ctx.clearRect(0, 0, scaled.width, scaled.height);
+      ctx.drawImage(output, 0, 0, scaled.width, scaled.height);
+      frames.push({ imageData: ctx.getImageData(0, 0, scaled.width, scaled.height), delay });
     }
     return frames;
   } finally {
     renderer.destroy();
+    restoreVideo();
   }
 }
 
-function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
-  return new Promise((resolve) => {
-    const onSeeked = () => {
-      video.removeEventListener('seeked', onSeeked);
-      resolve();
-    };
-    video.addEventListener('seeked', onSeeked);
-    video.currentTime = time;
-  });
-}
-
-export function stillToLoopFrames(
-  source: CanvasImageSource,
+/** Render a still into a short loop of finished frames so animated CRT effects show. */
+export async function stillToLoopFrames(
+  source: TexImageSource,
   width: number,
   height: number,
   settings: CrtSettings,
   textLayers: TextLayer[],
   crtAffectText: boolean,
   frameCount = 16,
-): GifFrame[] {
+): Promise<GifFrame[]> {
   const renderer = new CrtRenderer();
   const frameCanvas = document.createElement('canvas');
-  frameCanvas.width = width;
-  frameCanvas.height = height;
-  const ctx = frameCanvas.getContext('2d')!;
   const frames: GifFrame[] = [];
   try {
     for (let i = 0; i < frameCount; i++) {
-      const t = i / frameCount;
-      const crtCanvas = renderer.renderFrame(
-        source as HTMLCanvasElement,
-        settings,
-        i * 0.12,
-        { preserveAlpha: true },
+      const output = composeExportFrame(
+        renderer, source, settings, textLayers, crtAffectText, i * 0.12, i / frameCount, true,
       );
-      drawTextLayers(crtCanvas, textLayers, settings, crtAffectText, null, t);
-      let output: HTMLCanvasElement = crtCanvas;
-      if (settings.showBezel) output = applyBezelChrome(output);
-      ctx.clearRect(0, 0, width, height);
-      ctx.drawImage(output, 0, 0, width, height);
+      if (i === 0) {
+        // The bezel enlarges the frame; keep its real size instead of squashing it.
+        frameCanvas.width = settings.showBezel ? output.width : width;
+        frameCanvas.height = settings.showBezel ? output.height : height;
+      }
+      const ctx = frameCanvas.getContext('2d', { willReadFrequently: true })!;
+      ctx.clearRect(0, 0, frameCanvas.width, frameCanvas.height);
+      ctx.drawImage(output, 0, 0, frameCanvas.width, frameCanvas.height);
       frames.push({
-        imageData: new ImageData(
-          new Uint8ClampedArray(ctx.getImageData(0, 0, width, height).data),
-          width,
-          height,
-        ),
+        imageData: ctx.getImageData(0, 0, frameCanvas.width, frameCanvas.height),
         delay: 80,
       });
+      await yieldToBrowser();
     }
     return frames;
   } finally {
     renderer.destroy();
   }
-}
-
-export function cloneFrameCanvas(imageData: ImageData): HTMLCanvasElement {
-  return imageDataToCanvas(imageData);
 }

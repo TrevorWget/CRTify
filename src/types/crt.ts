@@ -299,6 +299,13 @@ export interface ExportQueueItem {
   label: string;
   format: ExportFormat;
   options: ExportOptionsConfig;
+  /** Editor state captured when the job was queued, so later edits don't leak in. */
+  editor: {
+    settings: CrtSettings;
+    textLayers: TextLayer[];
+    crtAffectText: boolean;
+    gifFrameIndex: number;
+  };
   status: 'queued' | 'running' | 'done' | 'error';
   error?: string;
 }
