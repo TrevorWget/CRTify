@@ -15,7 +15,7 @@ export function SceneKitRack({ onApply }: SceneKitRackProps) {
           One-click looks with sample overlays and matching Anim FX. Replaces the current overlay
           stack.
         </small>
-        <div className="segmented-control wrap preset-rack-list">
+        <div className="segmented-control wrap preset-rack-list scene-kit-list">
           {kits.map((kit) => (
             <button
               key={kit.id}
