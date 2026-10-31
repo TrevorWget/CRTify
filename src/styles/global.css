@@ -1904,6 +1904,24 @@ label:focus-within {
   padding: 0.3rem 0.45rem;
 }
 
+/* Scene kit names are longer than look presets, so size each chip to its label
+   instead of stretching equal-width buttons that wrap the text. */
+.scene-kit-list.segmented-control > button {
+  flex: 0 0 auto;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  padding: 0.3rem 0.45rem;
+  justify-content: center;
+}
+
+.scene-kit-list.segmented-control > button:first-child,
+.scene-kit-list.segmented-control > button:last-child {
+  justify-content: center;
+}
+
 .preset-delete {
   align-self: center;
   margin-left: -2px;
